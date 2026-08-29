@@ -11,7 +11,7 @@ interface TrendingGridProps {
   isLoading?: boolean;
 }
 
-export default function TrendingGrid({ trending, country, onCountryChange, isLoading = false }: TrendingGridProps) {
+export default React.memo(function TrendingGrid({ trending, country, onCountryChange, isLoading = false }: TrendingGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [hasDragged, setHasDragged] = useState(false);
@@ -131,4 +131,4 @@ export default function TrendingGrid({ trending, country, onCountryChange, isLoa
       </div>
     </div>
   );
-}
+});

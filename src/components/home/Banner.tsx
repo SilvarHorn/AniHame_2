@@ -10,7 +10,7 @@ interface BannerProps {
   trending: AnimeMedia[];
 }
 
-export default function Banner({ trending }: BannerProps) {
+export default React.memo(function Banner({ trending }: BannerProps) {
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, align: 'start', watchDrag: false }, [
     Autoplay({ delay: 5000, stopOnInteraction: false }),
     Fade()
@@ -126,4 +126,4 @@ export default function Banner({ trending }: BannerProps) {
       </div>
     </div>
   );
-}
+});

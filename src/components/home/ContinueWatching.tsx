@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import { Play, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-export default function ContinueWatching() {
+export default React.memo(function ContinueWatching() {
   const [progress, setProgress] = useState(getProgress());
   const [emblaRef] = useEmblaCarousel({
     align: 'start',
@@ -89,4 +89,4 @@ export default function ContinueWatching() {
       </div>
     </section>
   );
-}
+});

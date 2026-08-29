@@ -5,7 +5,7 @@ import { AiringSchedule } from '../../types';
 import { Clock, Calendar } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-export default function Timetable() {
+export default React.memo(function Timetable() {
   const getProfileRegion = () => {
     try {
       const saved = localStorage.getItem('anime_profile');
@@ -113,4 +113,4 @@ export default function Timetable() {
       </Link>
     </div>
   );
-}
+});

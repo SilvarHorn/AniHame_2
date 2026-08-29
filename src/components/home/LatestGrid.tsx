@@ -16,7 +16,7 @@ interface LatestGridProps {
   onPrevPage?: () => void;
 }
 
-export default function LatestGrid({ 
+export default React.memo(function LatestGrid({ 
   latest, 
   country, 
   onCountryChange,
@@ -157,4 +157,4 @@ export default function LatestGrid({
       </div>
     </div>
   );
-}
+});

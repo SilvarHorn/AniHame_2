@@ -1,4 +1,4 @@
-export const ANILIST_API_URL = 'https://graphql.anilist.co';
+export const ANILIST_API_URL = '/api/anilist';
 
 
 const requestCache = new Map<string, { data: any, timestamp: number }>();
