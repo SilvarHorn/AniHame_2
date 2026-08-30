@@ -23,6 +23,7 @@ export default function Watch() {
   const [imdbId, setImdbId] = useState<string | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [kitsuEpisodes, setKitsuEpisodes] = useState<any[]>([]);
+  const [malEpisodes, setMalEpisodes] = useState<any[]>([]);
   const [fillerEpisodes, setFillerEpisodes] = useState<number[]>([]);
   const [watchedEpisodes, setWatchedEpisodes] = useState<number[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -94,6 +95,25 @@ export default function Watch() {
               }
               
               if (data.Media.idMal) {
+                try {
+                  const { malClient } = await import('../api/mal');
+                  const currentEpNum = isNaN(currentEp) ? 1 : currentEp;
+                  const pStart = Math.max(1, Math.floor((currentEpNum - 1) / 100) * 100 + 1);
+                  const pEnd = pStart + 99;
+                  const malEpData = await malClient.getEpisodes(
+                    data.Media.idMal,
+                    { start: pStart, end: pEnd },
+                    (newEps) => {
+                      setMalEpisodes([...newEps]);
+                    }
+                  );
+                  if (malEpData && malEpData.length > 0) {
+                    setMalEpisodes([...malEpData]);
+                  }
+                } catch (e) {
+                  console.error('Failed to fetch MAL episodes', e);
+                }
+
                 try {
                   const { kitsuClient } = await import('../api/kitsu');
                   const kitsuId = await kitsuClient.getKitsuIdByMalId(data.Media.idMal);
@@ -223,10 +243,38 @@ export default function Watch() {
   const episodeTitleMap = new Map<number, string>();
   const episodeThumbMap = new Map<number, string>();
   
+  // 1. Fallback 2: AniList streaming episodes
+  if (anime?.streamingEpisodes) {
+    anime.streamingEpisodes.forEach(episode => {
+      const match = episode.title.match(/Episode\s+(\d+)(?:[\s\-:]+(.*))?/i);
+      if (match) {
+        const epNum = parseInt(match[1]);
+        const aniListTitle = match[2]?.trim();
+        
+        if (aniListTitle && !aniListTitle.match(/^Episode\s+\d+$/i)) {
+          episodeTitleMap.set(epNum, aniListTitle);
+        } else if (episode.title && !episode.title.match(/^Episode\s+\d+$/i)) {
+          episodeTitleMap.set(epNum, episode.title);
+        }
+
+        if (episode.thumbnail) {
+          episodeThumbMap.set(epNum, episode.thumbnail);
+        }
+      } else {
+        const titleMatch = episode.title.match(/(.*)/);
+        if (titleMatch && anime.format === 'MOVIE') {
+          episodeTitleMap.set(1, episode.title);
+          if (episode.thumbnail) episodeThumbMap.set(1, episode.thumbnail);
+        }
+      }
+    });
+  }
+
+  // 2. Fallback 1: Kitsu episodes
   if (kitsuEpisodes && kitsuEpisodes.length > 0) {
     kitsuEpisodes.forEach((ep: any) => {
       if (ep.num) {
-        if (ep.title) {
+        if (ep.title && !ep.title.match(/^Episode\s+\d+$/i)) {
           episodeTitleMap.set(ep.num, ep.title);
         }
         if (ep.thumbnail) {
@@ -235,27 +283,12 @@ export default function Watch() {
       }
     });
   }
-  
-  if (anime?.streamingEpisodes) {
-    anime.streamingEpisodes.forEach(episode => {
-      const match = episode.title.match(/Episode\s+(\d+)(?:[\s\-:]+(.*))?/i);
-      if (match) {
-        const epNum = parseInt(match[1]);
-        const aniListTitle = match[2]?.trim();
-        const existingTitle = episodeTitleMap.get(epNum);
-        
-        // If Kitsu didn't provide a title, or if Kitsu's title is just "Episode X"
-        const kitsuMissingOrGeneric = !existingTitle || existingTitle.match(/^Episode\s+\d+$/i) || existingTitle === `Episode ${epNum}`;
-        
-        if (aniListTitle && !aniListTitle.match(/^Episode\s+\d+$/i) && kitsuMissingOrGeneric) {
-          episodeTitleMap.set(epNum, aniListTitle);
-        } else if (!existingTitle && episode.title && !episode.title.match(/^Episode\s+\d+$/i) && kitsuMissingOrGeneric) {
-          episodeTitleMap.set(epNum, episode.title);
-        }
 
-        if (episode.thumbnail && !episodeThumbMap.has(epNum)) {
-          episodeThumbMap.set(epNum, episode.thumbnail);
-        }
+  // 3. Primary: MAL episodes
+  if (malEpisodes && malEpisodes.length > 0) {
+    malEpisodes.forEach((ep: any) => {
+      if (ep.num && ep.title && !ep.title.match(/^Episode\s+\d+$/i)) {
+        episodeTitleMap.set(ep.num, ep.title);
       }
     });
   }

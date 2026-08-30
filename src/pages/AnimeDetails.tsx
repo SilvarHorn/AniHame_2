@@ -96,6 +96,7 @@ export default function AnimeDetails() {
   const [imdbId, setImdbId] = useState<string | null>(null);
   const [showEpisodes, setShowEpisodes] = useState(false);
   const [kitsuEpisodes, setKitsuEpisodes] = useState<any[]>([]);
+  const [malEpisodes, setMalEpisodes] = useState<any[]>([]);
   const [episodeRange, setEpisodeRange] = useState('');
   const [fillerEpisodes, setFillerEpisodes] = useState<number[]>([]);
   const [watchedEpisodes, setWatchedEpisodes] = useState<number[]>([]);
@@ -151,6 +152,22 @@ export default function AnimeDetails() {
               }
               
               if (data.Media.idMal) {
+                try {
+                  const { malClient } = await import('../api/mal');
+                  const malEpData = await malClient.getEpisodes(
+                    data.Media.idMal,
+                    priorityRange,
+                    (newEps) => {
+                      setMalEpisodes([...newEps]);
+                    }
+                  );
+                  if (malEpData && malEpData.length > 0) {
+                    setMalEpisodes([...malEpData]);
+                  }
+                } catch (e) {
+                  console.error('Failed to fetch MAL episodes', e);
+                }
+
                 try {
                   const { kitsuClient } = await import('../api/kitsu');
                   const kitsuId = await kitsuClient.getKitsuIdByMalId(data.Media.idMal);
@@ -263,11 +280,30 @@ export default function AnimeDetails() {
   const episodeTitleMap = new Map<number, string>();
   const episodeThumbMap = new Map<number, string>();
   
-  // Use Kitsu for episode titles if available, otherwise fallback to anilist
+  // 1. Fallback 2: AniList streaming episodes
+  if (anime?.streamingEpisodes) {
+    anime.streamingEpisodes.forEach(ep => {
+      const match = ep.title.match(/Episode\s+(\d+)(?:\s*[-:]\s*(.*))?/i);
+      if (match) {
+        const epNum = parseInt(match[1]);
+        const aniListTitle = match[2]?.trim();
+        if (aniListTitle && !aniListTitle.match(/^Episode\s+\d+$/i)) {
+          episodeTitleMap.set(epNum, aniListTitle);
+        } else if (ep.title && !ep.title.match(/^Episode\s+\d+$/i)) {
+          episodeTitleMap.set(epNum, ep.title);
+        }
+        if (ep.thumbnail) {
+          episodeThumbMap.set(epNum, ep.thumbnail);
+        }
+      }
+    });
+  }
+
+  // 2. Fallback 1: Kitsu episodes (overrides AniList)
   if (kitsuEpisodes && kitsuEpisodes.length > 0) {
     kitsuEpisodes.forEach((ep: any) => {
       if (ep.num) {
-        if (ep.title) {
+        if (ep.title && !ep.title.match(/^Episode\s+\d+$/i)) {
           episodeTitleMap.set(ep.num, ep.title);
         }
         if (ep.thumbnail) {
@@ -277,17 +313,11 @@ export default function AnimeDetails() {
     });
   }
 
-  if (anime?.streamingEpisodes) {
-    anime.streamingEpisodes.forEach(ep => {
-      const match = ep.title.match(/Episode\s+(\d+)(?:\s*[-:]\s*(.*))?/i);
-      if (match) {
-        const epNum = parseInt(match[1]);
-        if (match[2] && !episodeTitleMap.has(epNum)) {
-          episodeTitleMap.set(epNum, match[2].trim());
-        }
-        if (ep.thumbnail) {
-          episodeThumbMap.set(epNum, ep.thumbnail);
-        }
+  // 3. Primary: MAL episodes (overrides Kitsu and AniList)
+  if (malEpisodes && malEpisodes.length > 0) {
+    malEpisodes.forEach((ep: any) => {
+      if (ep.num && ep.title && !ep.title.match(/^Episode\s+\d+$/i)) {
+        episodeTitleMap.set(ep.num, ep.title);
       }
     });
   }

@@ -103,6 +103,51 @@ app.post("/api/anilist", async (req, res) => {
   }
 });
 
+app.get("/api/mal/anime/:malId/episodes", async (req, res) => {
+  const malId = req.params.malId;
+  const offset = parseInt(req.query.offset as string) || 0;
+  const cacheKey = `mal_episodes_${malId}_${offset}`;
+  const cached = getCached(cacheKey);
+  if (cached) return res.json(cached);
+
+  const url = `https://myanimelist.net/anime/${malId}/a/episode?offset=${offset}`;
+  try {
+      const response = await axios.get(url, { 
+          validateStatus: () => true,
+          headers: { 'User-Agent': 'Mozilla/5.0' }
+      });
+      if (response.status === 200) {
+          const html = response.data;
+          const $ = cheerio.load(html);
+          const episodes: any[] = [];
+          
+          $('table.episode_list tbody tr.episode-list-data').each((index, element) => {
+              const epNum = $(element).find('td.episode-number').text().trim();
+              const title = $(element).find('td.episode-title a.fl-l.fw-b').text().trim();
+              if (epNum && title) {
+                  episodes.push({
+                      num: parseInt(epNum, 10),
+                      title: title
+                  });
+              }
+          });
+          
+          // MAL has navigation links for pagination? We can just return total if needed
+          // But we can just rely on the frontend fetching until empty.
+          
+          const result = { episodes };
+          setCached(cacheKey, result);
+          res.json(result);
+      } else {
+          setCached(cacheKey, { episodes: [] });
+          res.json({ episodes: [] });
+      }
+  } catch (error) {
+      console.error("MAL Scrape Error:", error);
+      res.json({ episodes: [] }); // Fail gracefully
+  }
+});
+
 // Kitsu API Proxies
 app.get("/api/kitsu/mappings/:malId", async (req, res) => {
   try {
