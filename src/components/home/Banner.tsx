@@ -11,7 +11,7 @@ interface BannerProps {
 }
 
 export default React.memo(function Banner({ trending }: BannerProps) {
-  const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, align: 'start', watchDrag: false }, [
+  const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, align: 'start' }, [
     Autoplay({ delay: 5000, stopOnInteraction: false }),
     Fade()
   ]);
