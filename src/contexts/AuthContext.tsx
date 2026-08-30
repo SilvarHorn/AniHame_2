@@ -3,6 +3,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 export interface UserPreferences {
   defaultServer: 'mal' | 'vidsrc';
   defaultAudio: 'sub' | 'dub';
+  showEpisodeDate?: boolean;
 }
 
 export interface UserProfile {

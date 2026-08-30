@@ -97,6 +97,14 @@ export default function Watch() {
               if (data.Media.idMal) {
                 try {
                   const { malClient } = await import('../api/mal');
+                  
+                  // Fetch the anime format/type from MAL
+                  malClient.getAnimeType(data.Media.idMal).then(malType => {
+                    if (malType) {
+                      setAnime(prev => prev ? { ...prev, format: malType.toUpperCase() } : prev);
+                    }
+                  }).catch(console.error);
+
                   const currentEpNum = isNaN(currentEp) ? 1 : currentEp;
                   const pStart = Math.max(1, Math.floor((currentEpNum - 1) / 100) * 100 + 1);
                   const pEnd = pStart + 99;
@@ -242,6 +250,7 @@ export default function Watch() {
 
   const episodeTitleMap = new Map<number, string>();
   const episodeThumbMap = new Map<number, string>();
+  const episodeAiredMap = new Map<number, string>();
   
   // 1. Fallback 2: AniList streaming episodes
   if (anime?.streamingEpisodes) {
@@ -289,6 +298,9 @@ export default function Watch() {
     malEpisodes.forEach((ep: any) => {
       if (ep.num && ep.title && !ep.title.match(/^Episode\s+\d+$/i)) {
         episodeTitleMap.set(ep.num, ep.title);
+      }
+      if (ep.num && ep.aired) {
+        episodeAiredMap.set(ep.num, ep.aired);
       }
     });
   }
@@ -544,6 +556,9 @@ export default function Watch() {
                       className={cn("text-xs sm:text-sm font-medium transition-colors", isFiller ? "text-[#f97316]/80 group-hover:text-[#f97316]" : "text-gray-400 group-hover:text-white")}
                       align="left"
                     />
+                    {profile?.preferences?.showEpisodeDate !== false && episodeAiredMap.get(epNum) && (
+                      <div className="text-[10px] text-gray-500 mt-0.5">{episodeAiredMap.get(epNum)}</div>
+                    )}
                   </div>
                 </div>
                 <PlayCircle size={24} className={cn("mr-2 flex-shrink-0 transition-colors", epNum === currentEp ? "text-primary" : isFiller ? "text-[#f97316]/50 group-hover:text-[#f97316]" : "text-gray-500 group-hover:text-primary")} />
@@ -581,11 +596,14 @@ export default function Watch() {
                     </span>
                     {isFiller && <span className="text-[10px] font-bold text-[#f97316] bg-black/50 px-1.5 py-0.5 rounded mt-1">FILLER</span>}
                   </div>
-                  <div className="absolute inset-0 flex items-center justify-center p-2 opacity-0 group-hover:opacity-100 transition-all duration-300 scale-105 group-hover:scale-100">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center p-2 opacity-0 group-hover:opacity-100 transition-all duration-300 scale-105 group-hover:scale-100">
                     <MarqueeText 
                       text={episodeTitleMap.get(epNum) || `Episode ${epNum}`}
                       className={cn("text-[10px] md:text-[11px] font-medium drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] leading-tight", isFiller ? "text-[#f97316]" : "text-white")}
                     />
+                    {profile?.preferences?.showEpisodeDate !== false && episodeAiredMap.get(epNum) && (
+                      <div className="text-[9px] text-gray-400 mt-1 opacity-80">{episodeAiredMap.get(epNum)}</div>
+                    )}
                   </div>
                 </div>
               </Link>

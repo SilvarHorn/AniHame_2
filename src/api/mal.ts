@@ -3,9 +3,27 @@ const malCache = new Map<string, any>();
 export interface MalEpisode {
   num: number;
   title: string;
+  aired?: string;
 }
 
 export const malClient = {
+  async getAnimeType(malId: number): Promise<string | null> {
+    const cacheKey = `anime-type-${malId}`;
+    if (malCache.has(cacheKey)) return malCache.get(cacheKey);
+
+    try {
+      const res = await fetch(`/api/mal/anime/${malId}`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const type = data.type || null;
+      malCache.set(cacheKey, type);
+      return type;
+    } catch (e) {
+      console.error('MAL type fetch error', e);
+      return null;
+    }
+  },
+
   // Returns all episodes for a MAL ID, handling pagination
   async getEpisodes(
     malId: number,

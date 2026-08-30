@@ -54,6 +54,7 @@ export const TRENDING_ANIME_QUERY = `
     Page(page: $page, perPage: $perPage) {
       media(sort: TRENDING_DESC, type: ANIME, isAdult: false, countryOfOrigin: $countryOfOrigin) {
         id
+        format
         title {
           romaji
           english
@@ -91,6 +92,7 @@ export const AIRING_SCHEDULE_QUERY = `
         episode
         media {
           id
+          format
           countryOfOrigin
           isAdult
           title {
@@ -179,6 +181,7 @@ export const SEARCH_ANIME_QUERY = `
     Page(page: $page, perPage: $perPage) {
       media(search: $search, genre_in: $genre_in, status_in: $status_in, seasonYear: $seasonYear, season: $season, format_in: $format_in, type: ANIME, isAdult: false, sort: $sort) {
         id
+        format
         title {
           romaji
           english
@@ -203,6 +206,7 @@ export const LATEST_UPDATED_ANIME_QUERY = `
       }
       media(sort: UPDATED_AT_DESC, type: ANIME, isAdult: false, status: RELEASING, countryOfOrigin: $countryOfOrigin) {
         id
+        format
         title {
           romaji
           english

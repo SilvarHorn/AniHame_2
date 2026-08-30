@@ -103,6 +103,41 @@ app.post("/api/anilist", async (req, res) => {
   }
 });
 
+app.get("/api/mal/anime/:malId", async (req, res) => {
+  const malId = req.params.malId;
+  const cacheKey = `mal_details_${malId}`;
+  const cached = getCached(cacheKey);
+  if (cached) return res.json(cached);
+
+  const url = `https://myanimelist.net/anime/${malId}`;
+  try {
+      const response = await axios.get(url, { 
+          validateStatus: () => true,
+          headers: { 'User-Agent': 'Mozilla/5.0' }
+      });
+      
+      let type = '';
+      if (response.status === 200) {
+          const html = response.data;
+          const $ = cheerio.load(html);
+          
+          $('div.spaceit_pad').each((index, element) => {
+              const text = $(element).text();
+              if (text.includes('Type:')) {
+                  type = $(element).find('a').text().trim() || text.replace('Type:', '').trim();
+              }
+          });
+      }
+      
+      const result = { type };
+      setCached(cacheKey, result);
+      res.json(result);
+  } catch (error) {
+      console.error("MAL Scrape Error (Details):", error);
+      res.json({ type: '' });
+  }
+});
+
 app.get("/api/mal/anime/:malId/episodes", async (req, res) => {
   const malId = req.params.malId;
   const offset = parseInt(req.query.offset as string) || 0;
@@ -124,10 +159,12 @@ app.get("/api/mal/anime/:malId/episodes", async (req, res) => {
           $('table.episode_list tbody tr.episode-list-data').each((index, element) => {
               const epNum = $(element).find('td.episode-number').text().trim();
               const title = $(element).find('td.episode-title a.fl-l.fw-b').text().trim();
+              const aired = $(element).find('td.episode-aired').text().trim();
               if (epNum && title) {
                   episodes.push({
                       num: parseInt(epNum, 10),
-                      title: title
+                      title: title,
+                      aired: aired === 'N/A' ? '' : aired
                   });
               }
           });

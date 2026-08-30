@@ -32,6 +32,7 @@ export default function Profile() {
   // Preferences state
   const [defaultServer, setDefaultServer] = useState<'mal' | 'vidsrc'>('mal');
   const [defaultAudio, setDefaultAudio] = useState<'sub' | 'dub'>('sub');
+  const [showEpisodeDate, setShowEpisodeDate] = useState<boolean>(true);
   
   // Theme state
   const [themeColor, setThemeColor] = useState('#8AD7D0');
@@ -67,6 +68,7 @@ export default function Profile() {
       setLocalAvatar(profile.photoURL || '');
       setDefaultServer(profile.preferences?.defaultServer || 'mal');
       setDefaultAudio(profile.preferences?.defaultAudio || 'sub');
+      setShowEpisodeDate(profile.preferences?.showEpisodeDate ?? true);
       setThemeColor(profile.themeColor || '#8AD7D0');
       setBgGradient(profile.bgGradient || '');
       setBgImage(profile.bgImage || '');
@@ -229,7 +231,7 @@ export default function Profile() {
         bgImage,
         bgOpacity
       });
-      await updatePreferences({ defaultServer, defaultAudio });
+      await updatePreferences({ defaultServer, defaultAudio, showEpisodeDate });
     } else {
       // Save to LocalStorage (Guests)
       try {
@@ -649,6 +651,26 @@ export default function Profile() {
                 value={defaultAudio}
                 onChange={(val) => { setDefaultAudio(val as 'sub' | 'dub'); if(!isEditing) setIsEditing(true); }}
               />
+            </div>
+          </div>
+          <div className="grid md:grid-cols-2 gap-6 mt-6">
+            <div className="bg-gray-900/50 p-5 rounded-xl border border-white/5 flex items-center justify-between">
+              <div>
+                <label className="block text-sm font-medium text-gray-400">Show Episode Release Date</label>
+                <p className="text-xs text-gray-500 mt-1">Display the aired date below episode titles</p>
+              </div>
+              <button
+                onClick={() => { setShowEpisodeDate(!showEpisodeDate); if(!isEditing) setIsEditing(true); }}
+                className={cn(
+                  "w-12 h-6 rounded-full transition-colors relative",
+                  showEpisodeDate ? "bg-primary" : "bg-gray-700"
+                )}
+              >
+                <div className={cn(
+                  "w-4 h-4 bg-white rounded-full absolute top-1 transition-transform",
+                  showEpisodeDate ? "translate-x-7" : "translate-x-1"
+                )} />
+              </button>
             </div>
           </div>
         </div>

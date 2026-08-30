@@ -14,6 +14,7 @@ interface AnimeCardProps {
 
 function AnimeCardComponent({ anime, showProgress, progressEpisode, orientation = 'portrait' }: AnimeCardProps) {
   const [isHovered, setIsHovered] = React.useState(false);
+
   const title = anime.title.english || anime.title.romaji;
   
   const isLandscape = orientation === 'landscape';
