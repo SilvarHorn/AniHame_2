@@ -1,8 +1,9 @@
 import React, { Suspense, lazy } from 'react';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import Layout from './components/layout/Layout';
+import NHentaiApp from './nhentai/NHentaiApp';
 
 const Home = lazy(() => import('./pages/Home'));
 const Explore = lazy(() => import('./pages/Explore'));
@@ -81,14 +82,31 @@ function AnimatedRoutes() {
   );
 }
 
+function MainApp() {
+  const { profile } = useAuth();
+  
+  if (profile?.displayName === 'nhentai') {
+    return (
+      <Routes>
+        <Route path="/profile" element={<Layout><Suspense fallback={<PageLoader />}><PageWrapper><Profile /></PageWrapper></Suspense></Layout>} />
+        <Route path="*" element={<Layout><NHentaiApp /></Layout>} />
+      </Routes>
+    );
+  }
+
+  return (
+    <Layout>
+      <AnimatedRoutes />
+    </Layout>
+  );
+}
+
 export default function App() {
   return (
     <AuthProvider>
-    <BrowserRouter>
-      <Layout>
-        <AnimatedRoutes />
-      </Layout>
-    </BrowserRouter>
+      <BrowserRouter>
+        <MainApp />
+      </BrowserRouter>
     </AuthProvider>
   );
 }

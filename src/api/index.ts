@@ -1,45 +1,24 @@
-import express from "express";
-import axios from "axios";
-import * as cheerio from "cheerio";
-
-function expandRange(range: string): number[] {
-    const [start, end] = range.split('-').map(Number);
-    const expandedRange: number[] = [];
-    for (let i = start; i <= end; i++) {
-        expandedRange.push(i);
-    }
-    return expandedRange;
-}
+import express from 'express';
+import axios from 'axios';
+import * as cheerio from 'cheerio';
 
 const app = express();
 app.use(express.json());
 
-// API routes FIRST
-app.get("/api/health", (req, res) => {
-  res.json({ status: "ok" });
-});
-
-// Cache for API responses
-const apiCache = new Map<string, { data: any, timestamp: number }>();
-const CACHE_DURATION = 1000 * 60 * 60; // 1 hour
-
+const cache = new Map<string, any>();
 function getCached(key: string) {
-  const cached = apiCache.get(key);
-  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-    return cached.data;
-  }
-  return null;
+    const cached = cache.get(key);
+    if (cached && Date.now() - cached.timestamp < 1000 * 60 * 60) return cached.data;
+    return null;
 }
-
 function setCached(key: string, data: any) {
-  apiCache.set(key, { data, timestamp: Date.now() });
+    cache.set(key, { data, timestamp: Date.now() });
 }
 
 let animeMappings: any[] | null = null;
 let mappingFetchPromise: Promise<any> | null = null;
 
 async function getAnimeMappings() {
-
   if (animeMappings) return animeMappings;
   if (!mappingFetchPromise) {
     mappingFetchPromise = fetch('https://raw.githubusercontent.com/SilvarHorn/anime-lists/master/anime-list-mini.json')
@@ -82,7 +61,6 @@ app.post("/api/anilist", async (req, res) => {
     if (cached) {
         return res.status(200).send(cached);
     }
-
     const response = await fetch('https://graphql.anilist.co', {
       method: 'POST',
       headers: {
@@ -151,6 +129,7 @@ app.get("/api/mal/anime/:malId/episodes", async (req, res) => {
           validateStatus: () => true,
           headers: { 'User-Agent': 'Mozilla/5.0' }
       });
+
       if (response.status === 200) {
           const html = response.data;
           const $ = cheerio.load(html);
@@ -160,6 +139,7 @@ app.get("/api/mal/anime/:malId/episodes", async (req, res) => {
               const epNum = $(element).find('td.episode-number').text().trim();
               const title = $(element).find('td.episode-title a.fl-l.fw-b').text().trim();
               const aired = $(element).find('td.episode-aired').text().trim();
+
               if (epNum && title) {
                   episodes.push({
                       num: parseInt(epNum, 10),
@@ -168,9 +148,6 @@ app.get("/api/mal/anime/:malId/episodes", async (req, res) => {
                   });
               }
           });
-          
-          // MAL has navigation links for pagination? We can just return total if needed
-          // But we can just rely on the frontend fetching until empty.
           
           const result = { episodes };
           setCached(cacheKey, result);
@@ -185,7 +162,6 @@ app.get("/api/mal/anime/:malId/episodes", async (req, res) => {
   }
 });
 
-// Kitsu API Proxies
 app.get("/api/kitsu/mappings/:malId", async (req, res) => {
   try {
     const { malId } = req.params;
@@ -199,6 +175,7 @@ app.get("/api/kitsu/mappings/:malId", async (req, res) => {
         'Content-Type': 'application/vnd.api+json'
       }
     });
+
     setCached(cacheKey, response.data);
     res.json(response.data);
   } catch (error: any) {
@@ -221,6 +198,7 @@ app.get("/api/kitsu/anime/:kitsuId/episodes", async (req, res) => {
         'Content-Type': 'application/vnd.api+json'
       }
     });
+
     setCached(cacheKey, response.data);
     res.json(response.data);
   } catch (error: any) {
@@ -241,12 +219,19 @@ app.get("/api/kitsu/anime/:kitsuId", async (req, res) => {
         'Content-Type': 'application/vnd.api+json'
       }
     });
+
     setCached(cacheKey, response.data);
     res.json(response.data);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
+
+function expandRange(range: string): number[] {
+  const [start, end] = range.split('-').map(Number);
+  if (isNaN(start) || isNaN(end)) return [];
+  return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+}
 
 app.get("/api/filler/:animeName", async (req, res) => {
   const animeName = req.params.animeName;
@@ -275,6 +260,7 @@ app.get("/api/filler/:animeName", async (req, res) => {
                   episodes.forEach(arr => fillerEpisodes.push(...arr));
               }
           });
+
           setCached(cacheKey, { fillerEpisodes });
           res.json({ fillerEpisodes });
       } else {
@@ -287,9 +273,7 @@ app.get("/api/filler/:animeName", async (req, res) => {
   }
 });
 
-export default app;
-
-const NHENTAI_KEY = 'nhk_fRMH-nP5PSYt3Y3x5o4XZecYQY-19jK6it-5MHjtVONElYxm';
+const NHENTAI_KEY = 'nhk_dQajaRA5Ob-8MDIeeYzjxwJ22ORkc9bUbqsxwLyJHjcWs50j';
 const NHENTAI_HEADERS = {
     'Authorization': `Key ${NHENTAI_KEY}`,
     'User-Agent': 'AniHame/1.0 (https://ais-dev-o6ghfgue2legdl3ryt35u6-886014336186.asia-southeast1.run.app)'
@@ -329,9 +313,11 @@ app.get('/api/nhentai/galleries/:id', async (req, res) => {
     }
 });
 
-app.get('/api/nhentai/galleries/popular', async (req, res) => {
+app.get('/api/nhentai/search', async (req, res) => {
     try {
-        const response = await axios.get(`https://nhentai.net/api/v2/galleries/popular`, {
+        const query = req.query.query;
+        const page = req.query.page || 1;
+        const response = await axios.get(`https://nhentai.net/api/v2/search?query=${encodeURIComponent(query as string)}&page=${page}`, {
             headers: NHENTAI_HEADERS
         });
         res.json(response.data);
@@ -340,20 +326,7 @@ app.get('/api/nhentai/galleries/popular', async (req, res) => {
     }
 });
 
-app.get('/api/nhentai/search', async (req, res) => {
-    try {
-        const query = req.query.query;
-        const page = req.query.page || 1;
-        const sort = req.query.sort;
-        let url = `https://nhentai.net/api/v2/search?query=${encodeURIComponent(query as string)}&page=${page}`;
-        if (sort) {
-            url += `&sort=${sort}`;
-        }
-        const response = await axios.get(url, {
-            headers: NHENTAI_HEADERS
-        });
-        res.json(response.data);
-    } catch(e: any) {
-        res.status(500).json({ error: e.message });
-    }
+export default app;
+app.get('/api/test', (req, res) => {
+    res.json({ message: 'Hello' });
 });
