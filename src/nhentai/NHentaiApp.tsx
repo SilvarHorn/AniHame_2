@@ -6,7 +6,7 @@ import { MarqueeText } from '../components/MarqueeText';
 import { Search } from 'lucide-react';
 import AnimeCardSkeleton from '../components/ui/AnimeCardSkeleton';
 
-function NHentaiCard({ gallery, key }: { gallery: any, key?: React.Key }) {
+function NHentaiCard({ gallery }: { gallery: any }) {
   const [isHovered, setIsHovered] = React.useState(false);
   const [imageLoaded, setImageLoaded] = React.useState(false);
   

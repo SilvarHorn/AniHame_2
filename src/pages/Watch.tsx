@@ -189,46 +189,20 @@ export default function Watch() {
     }
   }, [animeId]);
 
-  const [zhenTubeError, setZhenTubeError] = useState<string | null>(null);
-
   useEffect(() => {
     if (serverType === 'zhentube' && anime) {
       setIsZhenTubeLoading(true);
       setZhenTubeUrl(null);
-      setZhenTubeError(null);
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => {
-        controller.abort();
-      }, 10000); // 10 second timeout
-
       const romajiTitle = anime.title.romaji || anime.title.english || '';
-      fetch(`/api/zhentube?title=${encodeURIComponent(romajiTitle)}&episode=${currentEp}`, { signal: controller.signal })
+      fetch(`/api/zhentube?title=${encodeURIComponent(romajiTitle)}&episode=${currentEp}`)
         .then(res => res.json())
         .then(data => {
           if (data.src) {
             setZhenTubeUrl(data.src);
-          } else {
-             setZhenTubeError('No server found');
           }
         })
-        .catch(err => {
-           if (err.name === 'AbortError') {
-             setZhenTubeError('No server found (timeout)');
-           } else {
-             setZhenTubeError('No server found');
-             console.error('ZhenTube error:', err);
-           }
-        })
-        .finally(() => {
-          clearTimeout(timeoutId);
-          setIsZhenTubeLoading(false);
-        });
-        
-      return () => {
-        clearTimeout(timeoutId);
-        controller.abort();
-      };
+        .catch(err => console.error('ZhenTube error:', err))
+        .finally(() => setIsZhenTubeLoading(false));
     }
   }, [serverType, anime, currentEp]);
 
@@ -394,26 +368,17 @@ export default function Watch() {
         <div className="flex-1 flex flex-col gap-4 min-w-0">
           <div className="w-full bg-black rounded-xl overflow-hidden shadow-2xl shadow-black/50 border border-white/5 flex flex-col aspect-video shrink-0">
             <div className="w-full h-full relative">
-              {serverType === 'zhentube' && isZhenTubeLoading ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500 gap-3">
-                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
-                  <span className="text-sm">Loading video source...</span>
-                </div>
-              ) : serverType === 'zhentube' && zhenTubeError ? (
-                <div className="absolute inset-0 flex items-center justify-center text-gray-500 bg-black/50">
-                  {zhenTubeError}
-                </div>
-              ) : iframeUrl ? (
-                <iframe 
-                  src={iframeUrl}
-                  allowFullScreen
-                  className="absolute inset-0 w-full h-full border-none bg-black"
-                  title={`Watch ${anime.title.romaji} Episode ${currentEp}`}
-                  onError={handleIframeError}
-                ></iframe>
+              {iframeUrl ? (
+              <iframe 
+                src={iframeUrl}
+                allowFullScreen
+                className="absolute inset-0 w-full h-full border-none"
+                title={`Watch ${anime.title.romaji} Episode ${currentEp}`}
+                onError={handleIframeError}
+              ></iframe>
               ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-gray-500 bg-black/50">
-                  {serverType === 'zhentube' ? 'No server found' : 'No video source selected'}
+                <div className="absolute inset-0 flex items-center justify-center text-gray-500">
+                  No video source selected
                 </div>
               )}
             </div>
@@ -467,19 +432,7 @@ export default function Watch() {
 
             <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 flex-wrap justify-center w-full lg:w-auto">
               {/* Server Selector */}
-              {isHanimeMode() ? (
-                <div className="flex items-center bg-gray-800 rounded-lg p-1 w-full sm:w-auto justify-center">
-                  <button
-                    onClick={() => setServerType('zhentube')}
-                    className={cn(
-                      "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors",
-                      serverType === 'zhentube' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
-                    )}
-                  >
-                    ZhenTube
-                  </button>
-                </div>
-              ) : (
+              {!isHanimeMode() && (
                 <div className="flex items-center bg-gray-800 rounded-lg p-1 w-full sm:w-auto justify-center">
                   <button
                     onClick={() => setServerType('mal')}
