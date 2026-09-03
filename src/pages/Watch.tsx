@@ -313,6 +313,9 @@ export default function Watch() {
     iframeUrl = `https://megaplay.buzz/stream/mal/${malId}/${safeEpisode}/${safeAudio}`;
   }
 
+  // Apply sandbox attribute only to Megaplayz (mal), VidSrc, and TryEmbed
+  const isSandboxedServer = serverType === 'mal' || serverType === 'vidsrc' || serverType === 'tryembed';
+
   const handleIframeError = () => {
     if (serverType === 'mal') {
       setServerType('anime');
@@ -419,17 +422,20 @@ export default function Watch() {
       <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 mb-12">
         {/* Left Side: Video Player */}
         <div className="flex-1 flex flex-col gap-4 min-w-0">
-          {(serverType === 'anime' || serverType === 'animepahe') && (
+          {isInIframe && (serverType === 'anime' || serverType === 'animepahe') && (
             <div className="bg-amber-950/40 border border-amber-500/30 text-amber-200 px-4 py-2.5 rounded-xl text-xs sm:text-sm flex items-center justify-between gap-3 flex-wrap">
               <span>
-                <strong>Sandbox Active:</strong> Vidnest may request disabling sandbox. For full sandbox-protected playback, use <strong>tryembed</strong>, <strong>Megaplayz</strong>, or <strong>vidsrc</strong>.
+                <strong>Sandbox Detected:</strong> AI Studio's preview window enforces an outer iframe sandbox. Open in a new tab to play without sandbox restrictions.
               </span>
-              <button
-                onClick={() => setServerType('tryembed')}
-                className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-md text-xs transition-colors shrink-0"
+              <a
+                href={window.location.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-md text-xs transition-colors shrink-0 inline-flex items-center gap-1"
               >
-                Switch to tryembed
-              </button>
+                <ExternalLink size={13} />
+                Open in New Tab
+              </a>
             </div>
           )}
 
@@ -437,12 +443,13 @@ export default function Watch() {
             <div className="w-full h-full relative">
               {iframeUrl ? (
               <iframe 
+                key={`${serverType}-${currentEp}-${audioType}`}
                 src={iframeUrl}
                 frameBorder="0"
                 scrolling="no"
                 allowFullScreen
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                sandbox={isSandboxedServer ? "allow-scripts allow-same-origin allow-forms allow-presentation" : undefined}
                 className="absolute inset-0 w-full h-full border-none"
                 title={`Watch ${anime.title.romaji} Episode ${currentEp}`}
                 onError={handleIframeError}
