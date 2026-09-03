@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import Layout from './components/layout/Layout';
 import NHentaiApp from './nhentai/NHentaiApp';
+import DevToolsGuard from './components/DevToolsGuard';
 
 const Home = lazy(() => import('./pages/Home'));
 const Explore = lazy(() => import('./pages/Explore'));
@@ -87,17 +88,23 @@ function MainApp() {
   
   if (profile?.displayName === 'nhentai') {
     return (
-      <Routes>
-        <Route path="/profile" element={<Layout><Suspense fallback={<PageLoader />}><PageWrapper><Profile /></PageWrapper></Suspense></Layout>} />
-        <Route path="*" element={<Layout><NHentaiApp /></Layout>} />
-      </Routes>
+      <>
+        <DevToolsGuard />
+        <Routes>
+          <Route path="/profile" element={<Layout><Suspense fallback={<PageLoader />}><PageWrapper><Profile /></PageWrapper></Suspense></Layout>} />
+          <Route path="*" element={<Layout><NHentaiApp /></Layout>} />
+        </Routes>
+      </>
     );
   }
 
   return (
-    <Layout>
-      <AnimatedRoutes />
-    </Layout>
+    <>
+      <DevToolsGuard />
+      <Layout>
+        <AnimatedRoutes />
+      </Layout>
+    </>
   );
 }
 
