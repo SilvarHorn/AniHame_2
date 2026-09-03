@@ -291,7 +291,7 @@ app.get("/api/filler/:animeName", async (req, res) => {
 });
 
 
-const NHENTAI_KEY = 'nhk_fRMH-nP5PSYt3Y3x5o4XZecYQY-19jK6it-5MHjtVONElYxm';
+const NHENTAI_KEY = process.env.NHENTAI_KEY || 'nhk_fRMH-nP5PSYt3Y3x5o4XZecYQY-19jK6it-5MHjtVONElYxm';
 const NHENTAI_HEADERS = {
     'Authorization': `Key ${NHENTAI_KEY}`,
     'User-Agent': 'AniHame/1.0 (https://ais-dev-o6ghfgue2legdl3ryt35u6-886014336186.asia-southeast1.run.app)'

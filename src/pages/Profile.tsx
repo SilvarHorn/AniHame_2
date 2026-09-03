@@ -361,15 +361,38 @@ export default function Profile() {
           
           <div className="flex-1 text-center sm:text-left w-full">
             {isEditing ? (
-              <input
-                type="text"
-                value={localDisplayName}
-                onChange={(e) => setLocalDisplayName(e.target.value)}
-                className="text-3xl font-bold text-[#EDF1F5] bg-transparent border-b-2 border-primary focus:outline-none w-full max-w-xs mb-2"
-                placeholder="Username"
-              />
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-2">
+                <input
+                  type="text"
+                  value={localDisplayName}
+                  onChange={(e) => setLocalDisplayName(e.target.value)}
+                  className="text-3xl font-bold text-[#EDF1F5] bg-transparent border-b-2 border-primary focus:outline-none w-full max-w-xs"
+                  placeholder="Username"
+                />
+                {(localDisplayName === 'hanime' || localDisplayName === 'nhentai') && profile?.previousDisplayName && (
+                  <button
+                    onClick={() => setLocalDisplayName(profile.previousDisplayName!)}
+                    className="px-3 py-1 bg-red-500/20 text-red-400 rounded-lg text-sm font-bold hover:bg-red-500/30 transition-colors"
+                  >
+                    Revert to {profile.previousDisplayName}
+                  </button>
+                )}
+              </div>
             ) : (
-              <h1 className="text-3xl font-bold text-[#EDF1F5] mb-2">{localDisplayName}</h1>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-2">
+                <h1 className="text-3xl font-bold text-[#EDF1F5]">{localDisplayName}</h1>
+                {(localDisplayName === 'hanime' || localDisplayName === 'nhentai') && profile?.previousDisplayName && (
+                  <button
+                    onClick={() => {
+                      setLocalDisplayName(profile.previousDisplayName!);
+                      setIsEditing(true);
+                    }}
+                    className="px-3 py-1 bg-red-500/20 text-red-400 rounded-lg text-sm font-bold hover:bg-red-500/30 transition-colors"
+                  >
+                    Revert
+                  </button>
+                )}
+              </div>
             )}
             <p className="text-gray-400 max-w-2xl">Guest User</p>
           </div>

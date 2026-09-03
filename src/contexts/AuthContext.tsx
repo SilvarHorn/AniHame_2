@@ -10,6 +10,7 @@ export interface UserProfile {
   uid: string;
   email: string | null;
   displayName: string | null;
+  previousDisplayName?: string | null;
   photoURL: string | null;
   bio?: string;
   themeColor?: string;
@@ -90,7 +91,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateProfileData = async (data: Partial<UserProfile>) => {
     setProfile(prev => {
       const p = prev || defaultProfile;
-      return { ...p, ...data };
+      const newData = { ...p, ...data };
+      
+      if (data.displayName !== undefined && data.displayName !== p.displayName) {
+        if (data.displayName === 'hanime' || data.displayName === 'nhentai') {
+          if (p.displayName !== 'hanime' && p.displayName !== 'nhentai') {
+            newData.previousDisplayName = p.displayName;
+          } else {
+            newData.previousDisplayName = p.previousDisplayName;
+          }
+        } else {
+          newData.previousDisplayName = null;
+        }
+      }
+      return newData;
     });
   };
 

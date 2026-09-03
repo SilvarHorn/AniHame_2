@@ -2,10 +2,33 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import apiApp from "./api/index"; // Import the Express app
+import helmet from "helmet";
+import cors from "cors";
+import rateLimit from "express-rate-limit";
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  // Trust the reverse proxy (required for rate limiting behind proxies like Cloud Run/Nginx)
+  app.set("trust proxy", 1);
+
+  // Security Middleware
+  app.use(helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: false,
+    crossOriginResourcePolicy: false,
+    referrerPolicy: false,
+  }));
+  app.use(cors());
+
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 2000, // limit each IP to 2000 requests per windowMs
+    validate: { xForwardedForHeader: false }, // suppress reverse-proxy header warnings
+  });
+  app.use("/api", limiter);
 
   // Mount the API routes
   app.use(apiApp);
