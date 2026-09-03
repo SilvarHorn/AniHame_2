@@ -37,7 +37,7 @@ const [showPreview, setShowPreview] = useState(false);
   }, []);
 
   const displayAvatar = profile?.photoURL || localAvatar;
-  const displayUsername = profile?.username || localUsername || 'Profile';
+  const displayUsername = profile?.displayName || localUsername || 'Profile';
   const location = useLocation();
   const isNHentai = displayUsername === 'nhentai';
 

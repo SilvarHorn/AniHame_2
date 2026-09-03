@@ -145,7 +145,7 @@ export const MEDIA_FRAGMENT = `
     bannerImage
     averageScore
     isAdult
-    description(asHtml: true)
+    description(asHtml: false)
     episodes
     status
     genres

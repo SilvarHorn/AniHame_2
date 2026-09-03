@@ -274,7 +274,9 @@ app.get("/api/filler/:animeName", async (req, res) => {
   }
 });
 
-const NHENTAI_KEY = 'nhk_dQajaRA5Ob-8MDIeeYzjxwJ22ORkc9bUbqsxwLyJHjcWs50j';
+// This unused legacy server module must not contain credentials. The live API
+// implementation is api/index.ts and reads its key from server environment.
+const NHENTAI_KEY = process.env.NHENTAI_API_KEY;
 const NHENTAI_HEADERS = {
     'Authorization': `Key ${NHENTAI_KEY}`,
     'User-Agent': 'AniHame/1.0 (https://ais-dev-o6ghfgue2legdl3ryt35u6-886014336186.asia-southeast1.run.app)'

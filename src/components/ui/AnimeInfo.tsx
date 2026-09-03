@@ -191,10 +191,9 @@ export function AnimeInfo({ anime, className, hideTitle = false }: { anime: Anim
         );
       })()}
 
-      <div 
-        className="text-gray-400 text-sm leading-relaxed prose prose-invert max-w-none"
-        dangerouslySetInnerHTML={{ __html: anime.description || 'No description available.' }}
-      />
+      <div className="text-gray-400 text-sm leading-relaxed whitespace-pre-line">
+        {anime.description || 'No description available.'}
+      </div>
     </div>
   );
 }

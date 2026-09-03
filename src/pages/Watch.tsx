@@ -372,6 +372,9 @@ export default function Watch() {
               <iframe 
                 src={iframeUrl}
                 allowFullScreen
+                sandbox="allow-scripts allow-forms allow-popups allow-presentation"
+                allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+                referrerPolicy="strict-origin-when-cross-origin"
                 className="absolute inset-0 w-full h-full border-none"
                 title={`Watch ${anime.title.romaji} Episode ${currentEp}`}
                 onError={handleIframeError}
