@@ -30,7 +30,7 @@ export default function Profile() {
   const [localAvatar, setLocalAvatar] = useState('');
   
   // Preferences state
-  const [defaultServer, setDefaultServer] = useState<'mal' | 'vidsrc'>('mal');
+  const [defaultServer, setDefaultServer] = useState<'mal' | 'megaplayz' | 'anime' | 'animepahe' | 'tryembed' | 'vidsrc'>('mal');
   const [defaultAudio, setDefaultAudio] = useState<'sub' | 'dub'>('sub');
   const [showEpisodeDate, setShowEpisodeDate] = useState<boolean>(true);
   
@@ -656,11 +656,14 @@ export default function Profile() {
               <label className="block text-sm font-medium text-gray-400 mb-3">Default Video Server</label>
               <SingleSelect
                 options={[
-                  { label: 'MegaPlay MAL', value: 'mal' },
-                  { label: 'VidSrc', value: 'vidsrc' }
+                  { label: 'Megaplayz', value: 'mal' },
+                  { label: 'anime', value: 'anime' },
+                  { label: 'animepahe', value: 'animepahe' },
+                  { label: 'tryembed', value: 'tryembed' },
+                  { label: 'vidsrc', value: 'vidsrc' }
                 ]}
                 value={defaultServer}
-                onChange={(val) => { setDefaultServer(val as 'mal' | 'vidsrc'); if(!isEditing) setIsEditing(true); }}
+                onChange={(val) => { setDefaultServer(val as 'mal' | 'megaplayz' | 'anime' | 'animepahe' | 'tryembed' | 'vidsrc'); if(!isEditing) setIsEditing(true); }}
               />
             </div>
 

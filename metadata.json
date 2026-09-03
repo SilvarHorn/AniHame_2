@@ -1,6 +1,6 @@
 {
-  "name": "",
-  "description": "",
+  "name": "AniHame",
+  "description": "An Anime Streaming Website Build With Love.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

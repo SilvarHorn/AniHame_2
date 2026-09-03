@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { fetchAnilist, ANIME_DETAILS_QUERY, isHanimeMode } from '../api/anilist';
 import { AnimeMedia } from '../types';
 import { saveProgress } from '../store/progress';
-import { ChevronLeft, ChevronDown, ArrowDownUp, LayoutGrid, List as ListIcon, PlayCircle } from 'lucide-react';
+import { ChevronLeft, ChevronDown, ArrowDownUp, LayoutGrid, List as ListIcon, PlayCircle, ExternalLink } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 import { MarqueeText } from '../components/MarqueeText';
@@ -19,7 +19,7 @@ export default function Watch() {
   const [isListView, setIsListView] = useState(false);
   const [episodeChunk, setEpisodeChunk] = useState(0);
   const [audioType, setAudioType] = useState<'sub' | 'dub'>('sub');
-  const [serverType, setServerType] = useState<'mal' | 'vidsrc' | 'zhentube'>('mal');
+  const [serverType, setServerType] = useState<'mal' | 'anime' | 'animepahe' | 'tryembed' | 'vidsrc' | 'zhentube'>('mal');
   const [imdbId, setImdbId] = useState<string | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [kitsuEpisodes, setKitsuEpisodes] = useState<any[]>([]);
@@ -28,13 +28,29 @@ export default function Watch() {
   const [watchedEpisodes, setWatchedEpisodes] = useState<number[]>([]);
   const [malTitle, setMalTitle] = useState<string | null>(null);
   const [zhenTubeUrl, setZhenTubeUrl] = useState<string | null>(null);
+  const [isInIframe, setIsInIframe] = useState(false);
+
+  useEffect(() => {
+    try {
+      setIsInIframe(window.self !== window.top);
+    } catch {
+      setIsInIframe(true);
+    }
+  }, []);
   const [isZhenTubeLoading, setIsZhenTubeLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (profile?.preferences) {
-      setServerType(profile.preferences.defaultServer);
-      setAudioType(profile.preferences.defaultAudio);
+      const prefServer = profile.preferences.defaultServer;
+      if (prefServer === 'megaplayz') {
+        setServerType('mal');
+      } else if (prefServer) {
+        setServerType(prefServer as any);
+      }
+      if (profile.preferences.defaultAudio) {
+        setAudioType(profile.preferences.defaultAudio);
+      }
     }
   }, [profile]);
 
@@ -270,24 +286,46 @@ export default function Watch() {
   }
 
   let iframeUrl = '';
+  const rawAnilistId = anime?.id || animeId;
+  const anilistIdForStream = encodeURIComponent(String(rawAnilistId).trim().replace(/[^a-zA-Z0-9_-]/g, ''));
+  const safeEpisode = Math.max(1, Math.floor(Number(currentEp)) || 1);
+  const safeAudio = audioType === 'dub' ? 'dub' : 'sub';
+
   if (serverType === 'vidsrc' && imdbId) {
+    const safeImdb = encodeURIComponent(String(imdbId).trim().replace(/[^a-zA-Z0-9_-]/g, ''));
     if (anime?.format === 'MOVIE') {
-      iframeUrl = `https://vidsrc2.ru/embed/movie/${imdbId}`;
+      iframeUrl = `https://vidsrc2.ru/embed/movie/${safeImdb}`;
     } else {
-      iframeUrl = `https://vidsrc2.ru/embed/tv/${imdbId}/1/${currentEp}`;
+      iframeUrl = `https://vidsrc2.ru/embed/tv/${safeImdb}/1/${safeEpisode}`;
     }
+  } else if (serverType === 'anime') {
+    iframeUrl = `https://vidnest.fun/anime/${anilistIdForStream}/${safeEpisode}/${safeAudio}`;
+  } else if (serverType === 'animepahe') {
+    iframeUrl = `https://vidnest.fun/animepahe/${anilistIdForStream}/${safeEpisode}/${safeAudio}`;
+  } else if (serverType === 'tryembed') {
+    iframeUrl = `https://tryembed.us.cc/embed/anime/${anilistIdForStream}/${safeEpisode}/${safeAudio}`;
   } else if (serverType === 'zhentube') {
     iframeUrl = zhenTubeUrl || '';
   } else {
-    // Default to MAL
-    iframeUrl = `https://megaplay.buzz/stream/mal/${anime?.idMal || animeId}/${currentEp}/${audioType}`;
+    // Default to Megaplayz (MAL)
+    const rawMalId = anime?.idMal || animeId;
+    const malId = encodeURIComponent(String(rawMalId).trim().replace(/[^a-zA-Z0-9_-]/g, ''));
+    iframeUrl = `https://megaplay.buzz/stream/mal/${malId}/${safeEpisode}/${safeAudio}`;
   }
 
   const handleIframeError = () => {
     if (serverType === 'mal') {
+      setServerType('anime');
+    } else if (serverType === 'anime') {
+      setServerType('animepahe');
+    } else if (serverType === 'animepahe') {
+      setServerType('tryembed');
+    } else if (serverType === 'tryembed') {
       if (imdbId) setServerType('vidsrc');
+      else setServerType('mal');
     } else if (serverType === 'vidsrc') {
       if (anime?.idMal) setServerType('mal');
+      else setServerType('anime');
     }
   };
 
@@ -350,28 +388,61 @@ export default function Watch() {
 
   return (
     <div className="w-full p-4 sm:p-6 lg:p-8 flex flex-col min-h-[calc(100vh-3.5rem)] pb-12">
-      <div className="flex items-center gap-4 mb-4 md:mb-6 shrink-0">
-        <Link 
-          to={`/anime/${anime.id}`}
-          className="bg-gray-800 hover:bg-gray-700 text-gray-300 p-2 rounded-lg transition-colors border border-white/5"
-        >
-          <ChevronLeft size={20} />
-        </Link>
-        <h1 className="text-xl md:text-2xl font-bold text-[#EDF1F5] line-clamp-1">
-          {malTitle || (isHanimeMode() ? (anime.title.romaji || anime.title.english) : (anime.title.english || anime.title.romaji))}
-          <span className="text-primary ml-2 font-medium">Episode {currentEp}</span>
-        </h1>
+      <div className="flex items-center justify-between gap-4 mb-4 md:mb-6 shrink-0 flex-wrap">
+        <div className="flex items-center gap-4 min-w-0">
+          <Link 
+            to={`/anime/${anime.id}`}
+            className="bg-gray-800 hover:bg-gray-700 text-gray-300 p-2 rounded-lg transition-colors border border-white/5 shrink-0"
+          >
+            <ChevronLeft size={20} />
+          </Link>
+          <h1 className="text-xl md:text-2xl font-bold text-[#EDF1F5] line-clamp-1">
+            {malTitle || (isHanimeMode() ? (anime.title.romaji || anime.title.english) : (anime.title.english || anime.title.romaji))}
+            <span className="text-primary ml-2 font-medium">Episode {currentEp}</span>
+          </h1>
+        </div>
+
+        {isInIframe && (
+          <a
+            href={window.location.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 transition-colors shrink-0"
+            title="Open in a new browser tab to remove preview sandbox"
+          >
+            <ExternalLink size={14} />
+            <span>Open in New Tab</span>
+          </a>
+        )}
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 mb-12">
         {/* Left Side: Video Player */}
         <div className="flex-1 flex flex-col gap-4 min-w-0">
+          {(serverType === 'anime' || serverType === 'animepahe') && (
+            <div className="bg-amber-950/40 border border-amber-500/30 text-amber-200 px-4 py-2.5 rounded-xl text-xs sm:text-sm flex items-center justify-between gap-3 flex-wrap">
+              <span>
+                <strong>Sandbox Active:</strong> Vidnest may request disabling sandbox. For full sandbox-protected playback, use <strong>tryembed</strong>, <strong>Megaplayz</strong>, or <strong>vidsrc</strong>.
+              </span>
+              <button
+                onClick={() => setServerType('tryembed')}
+                className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-md text-xs transition-colors shrink-0"
+              >
+                Switch to tryembed
+              </button>
+            </div>
+          )}
+
           <div className="w-full bg-black rounded-xl overflow-hidden shadow-2xl shadow-black/50 border border-white/5 flex flex-col aspect-video shrink-0">
             <div className="w-full h-full relative">
               {iframeUrl ? (
               <iframe 
                 src={iframeUrl}
+                frameBorder="0"
+                scrolling="no"
                 allowFullScreen
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
                 className="absolute inset-0 w-full h-full border-none"
                 title={`Watch ${anime.title.romaji} Episode ${currentEp}`}
                 onError={handleIframeError}
@@ -433,17 +504,47 @@ export default function Watch() {
             <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 flex-wrap justify-center w-full lg:w-auto">
               {/* Server Selector */}
               {!isHanimeMode() && (
-                <div className="flex items-center bg-gray-800 rounded-lg p-1 w-full sm:w-auto justify-center">
+                <div className="flex items-center bg-gray-800 rounded-lg p-1 w-full sm:w-auto justify-center flex-wrap sm:flex-nowrap gap-1 sm:gap-0">
                   <button
                     onClick={() => setServerType('mal')}
-                    disabled={!anime?.idMal}
+                    disabled={!anime?.idMal && !animeId}
                     className={cn(
                       "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
                       serverType === 'mal' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
                     )}
                     title={!anime?.idMal ? "MAL ID not available for this anime" : undefined}
                   >
-                    MAL
+                    Megaplayz
+                  </button>
+                  <button
+                    onClick={() => setServerType('anime')}
+                    disabled={!anime?.id && !animeId}
+                    className={cn(
+                      "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                      serverType === 'anime' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                    )}
+                  >
+                    anime
+                  </button>
+                  <button
+                    onClick={() => setServerType('animepahe')}
+                    disabled={!anime?.id && !animeId}
+                    className={cn(
+                      "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                      serverType === 'animepahe' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                    )}
+                  >
+                    animepahe
+                  </button>
+                  <button
+                    onClick={() => setServerType('tryembed')}
+                    disabled={!anime?.id && !animeId}
+                    className={cn(
+                      "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                      serverType === 'tryembed' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                    )}
+                  >
+                    tryembed
                   </button>
                   <button
                     onClick={() => setServerType('vidsrc')}
@@ -454,12 +555,12 @@ export default function Watch() {
                     )}
                     title={!imdbId ? "IMDb ID not available for this anime" : undefined}
                   >
-                    VidSrc
+                    vidsrc
                   </button>
                 </div>
               )}
               {/* Audio Type Selector */}
-              {serverType === 'mal' && (
+              {(serverType === 'mal' || serverType === 'anime' || serverType === 'animepahe' || serverType === 'tryembed') && (
                 <div className="flex items-center bg-gray-800 rounded-lg p-1 w-full sm:w-auto justify-center mt-2 sm:mt-0">
                   <button
                     onClick={() => setAudioType('sub')}

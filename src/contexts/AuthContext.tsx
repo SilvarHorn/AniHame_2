@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
 export interface UserPreferences {
-  defaultServer: 'mal' | 'vidsrc';
+  defaultServer: 'mal' | 'megaplayz' | 'vidsrc' | 'zhentube' | 'anime' | 'animepahe' | 'tryembed';
   defaultAudio: 'sub' | 'dub';
   showEpisodeDate?: boolean;
 }
