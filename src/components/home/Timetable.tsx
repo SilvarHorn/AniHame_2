@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { format, fromUnixTime, isToday, isTomorrow, formatDistanceToNow } from 'date-fns';
-import { fetchAnilist, AIRING_SCHEDULE_QUERY } from '../../api/anilist';
+import { fetchAnilist, AIRING_SCHEDULE_QUERY, isHanimeMode } from '../../api/anilist';
 import { AiringSchedule } from '../../types';
 import { Clock, Calendar } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -36,7 +36,7 @@ export default React.memo(function Timetable() {
         });
         
         if (data?.Page?.airingSchedules) {
-          const filtered = data.Page.airingSchedules.filter((s: any) => !s.media?.isAdult);
+          const filtered = data.Page.airingSchedules.filter((s: any) => isHanimeMode() ? s.media?.isAdult : !s.media?.isAdult);
           setSchedule(filtered);
         }
       } catch (err) {
@@ -95,7 +95,7 @@ export default React.memo(function Timetable() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-xs font-bold text-[#EDF1F5] truncate group-hover:text-primary transition-colors">
-                  {item.media.title.english || item.media.title.romaji}
+                  {isHanimeMode() ? (item.media.title.romaji || item.media.title.english) : (item.media.title.english || item.media.title.romaji)}
                 </div>
                 <div className="text-[10px] text-primary truncate">
                   Ep {item.episode} Airing

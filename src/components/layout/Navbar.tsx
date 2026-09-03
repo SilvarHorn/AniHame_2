@@ -1,3 +1,4 @@
+import { isHanimeMode } from "../../api/anilist";
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Search, User, Tv, Menu, X } from 'lucide-react';
@@ -118,7 +119,7 @@ const [showPreview, setShowPreview] = useState(false);
                        <Link key={anime.id} to={`/anime/${anime.id}`} className="flex items-center gap-3 p-2 hover:bg-white/5 border-b border-gray-800 last:border-0 transition-colors">
                          <img src={anime.coverImage.large} className="w-8 h-10 object-cover rounded" />
                          <div className="flex-1 min-w-0">
-                           <div className="text-xs font-bold text-[#EDF1F5] truncate">{anime.title.english || anime.title.romaji}</div>
+                           <div className="text-xs font-bold text-[#EDF1F5] truncate">{isHanimeMode() ? (anime.title.romaji || anime.title.english) : (anime.title.english || anime.title.romaji)}</div>
                            <div className="text-[10px] text-gray-500 truncate">{anime.genres?.[0]}</div>
                          </div>
                        </Link>
@@ -179,7 +180,7 @@ const [showPreview, setShowPreview] = useState(false);
                    <Link key={anime.id} to={`/anime/${anime.id}`} onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-3 p-2 hover:bg-white/5 border-b border-gray-800 last:border-0 transition-colors">
                      <img src={anime.coverImage.large} className="w-10 h-14 object-cover rounded" />
                      <div className="flex-1 min-w-0">
-                       <div className="text-sm font-bold text-[#EDF1F5] truncate">{anime.title.english || anime.title.romaji}</div>
+                       <div className="text-sm font-bold text-[#EDF1F5] truncate">{isHanimeMode() ? (anime.title.romaji || anime.title.english) : (anime.title.english || anime.title.romaji)}</div>
                        <div className="text-xs text-gray-500 truncate">{anime.genres?.join(', ')}</div>
                      </div>
                    </Link>

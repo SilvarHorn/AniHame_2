@@ -1,3 +1,4 @@
+import { isHanimeMode } from "../../api/anilist";
 import React, { useState, useEffect, useCallback } from 'react';
 import useEmblaCarousel from 'embla-carousel-react';
 import Autoplay from 'embla-carousel-autoplay';
@@ -53,7 +54,7 @@ export default React.memo(function Banner({ trending }: BannerProps) {
                 <div className="absolute inset-0">
                   <img
                     src={anime.bannerImage || anime.coverImage.extraLarge}
-                    alt={anime.title.english || anime.title.romaji}
+                    alt={isHanimeMode() ? (anime.title.romaji || anime.title.english) : (anime.title.english || anime.title.romaji)}
                     fetchPriority="high"
                     className="w-full h-full object-cover object-center scale-[1.15]"
                   />
@@ -78,7 +79,7 @@ export default React.memo(function Banner({ trending }: BannerProps) {
                     </div>
                     
                     <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-2 line-clamp-2 leading-tight drop-shadow-lg">
-                      {anime.title.english || anime.title.romaji}
+                      {isHanimeMode() ? (anime.title.romaji || anime.title.english) : (anime.title.english || anime.title.romaji)}
                     </h1>
                     
                     <p className="text-gray-300 text-sm md:text-base mb-6 line-clamp-2 max-w-lg drop-shadow-md">

@@ -1,3 +1,4 @@
+import { isHanimeMode } from "../../api/anilist";
 import React, { memo } from 'react';
 import { Link } from 'react-router-dom';
 import { Star, Play } from 'lucide-react';
@@ -15,7 +16,7 @@ interface AnimeCardProps {
 function AnimeCardComponent({ anime, showProgress, progressEpisode, orientation = 'portrait' }: AnimeCardProps) {
   const [isHovered, setIsHovered] = React.useState(false);
 
-  const title = anime.title.english || anime.title.romaji;
+  const title = isHanimeMode() ? (anime.title.romaji || anime.title.english) : (anime.title.english || anime.title.romaji);
   
   const isLandscape = orientation === 'landscape';
   const imageSrc = isLandscape && anime.bannerImage ? anime.bannerImage : anime.coverImage.large;

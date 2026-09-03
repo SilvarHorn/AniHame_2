@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { fetchAnilist, ANIME_DETAILS_QUERY } from '../api/anilist';
+import { fetchAnilist, ANIME_DETAILS_QUERY, isHanimeMode } from '../api/anilist';
 import { AnimeMedia } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { Play, Star, Calendar, Info, ExternalLink, ArrowDownUp, LayoutGrid, List as ListIcon, PlayCircle, MonitorPlay, ChevronDown } from 'lucide-react';
@@ -102,6 +102,7 @@ export default function AnimeDetails() {
   const [episodeRange, setEpisodeRange] = useState('');
   const [fillerEpisodes, setFillerEpisodes] = useState<number[]>([]);
   const [watchedEpisodes, setWatchedEpisodes] = useState<number[]>([]);
+  const [malTitle, setMalTitle] = useState<string | null>(null);
 
   useEffect(() => {
     const loadDetails = async () => {
@@ -113,7 +114,7 @@ export default function AnimeDetails() {
         setWatchedEpisodes(JSON.parse(localStorage.getItem(watchedKey) || '[]'));
 
         if (data?.Media) {
-          if (data.Media.isAdult) {
+          if (data.Media.isAdult && !isHanimeMode()) {
             setError('Content restricted.');
             return;
           }
@@ -219,6 +220,17 @@ export default function AnimeDetails() {
   }, [id]);
 
   useEffect(() => {
+    if (isHanimeMode() && anime?.idMal) {
+      fetch(`/api/mal/anime/${anime.idMal}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.title) setMalTitle(data.title);
+        })
+        .catch(console.error);
+    }
+  }, [anime]);
+
+  useEffect(() => {
     if (!loading && anime) {
       const timer = setTimeout(() => {
         setShowEpisodes(true);
@@ -279,7 +291,7 @@ export default function AnimeDetails() {
 
   if (!anime) return null;
 
-  const title = anime.title.english || anime.title.romaji;
+  const title = malTitle || (isHanimeMode() ? (anime.title.romaji || anime.title.english) : (anime.title.english || anime.title.romaji));
   
   // Create episode boxes
   let episodeCount = anime.episodes || 12; // Fallback

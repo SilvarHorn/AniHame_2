@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useParams, Link } from 'react-router-dom';
-import { fetchAnilist, ANIME_DETAILS_QUERY } from '../api/anilist';
+import { fetchAnilist, ANIME_DETAILS_QUERY, isHanimeMode } from '../api/anilist';
 import { AnimeMedia } from '../types';
 import { saveProgress } from '../store/progress';
 import { ChevronLeft, ChevronDown, ArrowDownUp, LayoutGrid, List as ListIcon, PlayCircle } from 'lucide-react';
@@ -19,13 +19,16 @@ export default function Watch() {
   const [isListView, setIsListView] = useState(false);
   const [episodeChunk, setEpisodeChunk] = useState(0);
   const [audioType, setAudioType] = useState<'sub' | 'dub'>('sub');
-  const [serverType, setServerType] = useState<'mal' | 'vidsrc'>('mal');
+  const [serverType, setServerType] = useState<'mal' | 'vidsrc' | 'zhentube'>('mal');
   const [imdbId, setImdbId] = useState<string | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [kitsuEpisodes, setKitsuEpisodes] = useState<any[]>([]);
   const [malEpisodes, setMalEpisodes] = useState<any[]>([]);
   const [fillerEpisodes, setFillerEpisodes] = useState<number[]>([]);
   const [watchedEpisodes, setWatchedEpisodes] = useState<number[]>([]);
+  const [malTitle, setMalTitle] = useState<string | null>(null);
+  const [zhenTubeUrl, setZhenTubeUrl] = useState<string | null>(null);
+  const [isZhenTubeLoading, setIsZhenTubeLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -67,7 +70,7 @@ export default function Watch() {
       try {
         const data = await fetchAnilist(ANIME_DETAILS_QUERY, { id: animeId });
         if (data?.Media) {
-          if (data.Media.isAdult) {
+          if (data.Media.isAdult && !isHanimeMode()) {
             setError('Content restricted.');
             return;
           }
@@ -169,6 +172,69 @@ export default function Watch() {
     if (animeId) loadDetails();
   }, [animeId, currentEp]);
 
+  useEffect(() => {
+    if (isHanimeMode() && anime?.idMal) {
+      fetch(`/api/mal/anime/${anime.idMal}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.title) setMalTitle(data.title);
+        })
+        .catch(console.error);
+    }
+  }, [anime]);
+
+  useEffect(() => {
+    if (isHanimeMode()) {
+      setServerType('zhentube');
+    }
+  }, [animeId]);
+
+  const [zhenTubeError, setZhenTubeError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (serverType === 'zhentube' && anime) {
+      setIsZhenTubeLoading(true);
+      setZhenTubeUrl(null);
+      setZhenTubeError(null);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, 10000); // 10 second timeout
+
+      const romajiTitle = anime.title.romaji || anime.title.english || '';
+      fetch(`/api/zhentube?title=${encodeURIComponent(romajiTitle)}&episode=${currentEp}`, { signal: controller.signal })
+        .then(res => res.json())
+        .then(data => {
+          if (data.src) {
+            setZhenTubeUrl(data.src);
+          } else {
+             setZhenTubeError('No server found');
+          }
+        })
+        .catch(err => {
+           if (err.name === 'AbortError') {
+             setZhenTubeError('No server found (timeout)');
+           } else {
+             setZhenTubeError('No server found');
+             console.error('ZhenTube error:', err);
+           }
+        })
+        .finally(() => {
+          clearTimeout(timeoutId);
+          setIsZhenTubeLoading(false);
+        });
+        
+      return () => {
+        clearTimeout(timeoutId);
+        controller.abort();
+      };
+    }
+  }, [serverType, anime, currentEp]);
+
+
+
+
   if (error) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -224,6 +290,7 @@ export default function Watch() {
   // Filter by chunk *before* sorting so the chunks are stable
   episodes = episodes.filter(ep => ep > episodeChunk * chunkSize && ep <= (episodeChunk + 1) * chunkSize);
 
+  
   if (sortDesc) {
     episodes = episodes.reverse();
   }
@@ -235,6 +302,8 @@ export default function Watch() {
     } else {
       iframeUrl = `https://vidsrc2.ru/embed/tv/${imdbId}/1/${currentEp}`;
     }
+  } else if (serverType === 'zhentube') {
+    iframeUrl = zhenTubeUrl || '';
   } else {
     // Default to MAL
     iframeUrl = `https://megaplay.buzz/stream/mal/${anime?.idMal || animeId}/${currentEp}/${audioType}`;
@@ -315,7 +384,7 @@ export default function Watch() {
           <ChevronLeft size={20} />
         </Link>
         <h1 className="text-xl md:text-2xl font-bold text-[#EDF1F5] line-clamp-1">
-          {anime.title.english || anime.title.romaji}
+          {malTitle || (isHanimeMode() ? (anime.title.romaji || anime.title.english) : (anime.title.english || anime.title.romaji))}
           <span className="text-primary ml-2 font-medium">Episode {currentEp}</span>
         </h1>
       </div>
@@ -325,13 +394,28 @@ export default function Watch() {
         <div className="flex-1 flex flex-col gap-4 min-w-0">
           <div className="w-full bg-black rounded-xl overflow-hidden shadow-2xl shadow-black/50 border border-white/5 flex flex-col aspect-video shrink-0">
             <div className="w-full h-full relative">
-              <iframe 
-                src={iframeUrl}
-                allowFullScreen
-                className="absolute inset-0 w-full h-full border-none"
-                title={`Watch ${anime.title.romaji} Episode ${currentEp}`}
-                onError={handleIframeError}
-              ></iframe>
+              {serverType === 'zhentube' && isZhenTubeLoading ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500 gap-3">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+                  <span className="text-sm">Loading video source...</span>
+                </div>
+              ) : serverType === 'zhentube' && zhenTubeError ? (
+                <div className="absolute inset-0 flex items-center justify-center text-gray-500 bg-black/50">
+                  {zhenTubeError}
+                </div>
+              ) : iframeUrl ? (
+                <iframe 
+                  src={iframeUrl}
+                  allowFullScreen
+                  className="absolute inset-0 w-full h-full border-none bg-black"
+                  title={`Watch ${anime.title.romaji} Episode ${currentEp}`}
+                  onError={handleIframeError}
+                ></iframe>
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center text-gray-500 bg-black/50">
+                  {serverType === 'zhentube' ? 'No server found' : 'No video source selected'}
+                </div>
+              )}
             </div>
           </div>
             
@@ -383,32 +467,46 @@ export default function Watch() {
 
             <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 flex-wrap justify-center w-full lg:w-auto">
               {/* Server Selector */}
-              <div className="flex items-center bg-gray-800 rounded-lg p-1 w-full sm:w-auto justify-center">
-                <button
-                  onClick={() => setServerType('mal')}
-                  disabled={!anime?.idMal}
-                  className={cn(
-                    "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-                    serverType === 'mal' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
-                  )}
-                  title={!anime?.idMal ? "MAL ID not available for this anime" : undefined}
-                >
-                  MAL
-                </button>
-                <button
-                  onClick={() => setServerType('vidsrc')}
-                  disabled={!imdbId}
-                  className={cn(
-                    "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-                    serverType === 'vidsrc' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
-                  )}
-                  title={!imdbId ? "IMDb ID not available for this anime" : undefined}
-                >
-                  VidSrc
-                </button>
-              </div>
+              {isHanimeMode() ? (
+                <div className="flex items-center bg-gray-800 rounded-lg p-1 w-full sm:w-auto justify-center">
+                  <button
+                    onClick={() => setServerType('zhentube')}
+                    className={cn(
+                      "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors",
+                      serverType === 'zhentube' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                    )}
+                  >
+                    ZhenTube
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center bg-gray-800 rounded-lg p-1 w-full sm:w-auto justify-center">
+                  <button
+                    onClick={() => setServerType('mal')}
+                    disabled={!anime?.idMal}
+                    className={cn(
+                      "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                      serverType === 'mal' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                    )}
+                    title={!anime?.idMal ? "MAL ID not available for this anime" : undefined}
+                  >
+                    MAL
+                  </button>
+                  <button
+                    onClick={() => setServerType('vidsrc')}
+                    disabled={!imdbId}
+                    className={cn(
+                      "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                      serverType === 'vidsrc' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                    )}
+                    title={!imdbId ? "IMDb ID not available for this anime" : undefined}
+                  >
+                    VidSrc
+                  </button>
+                </div>
+              )}
               {/* Audio Type Selector */}
-              {serverType !== 'vidsrc' && (
+              {serverType === 'mal' && (
                 <div className="flex items-center bg-gray-800 rounded-lg p-1 w-full sm:w-auto justify-center mt-2 sm:mt-0">
                   <button
                     onClick={() => setAudioType('sub')}

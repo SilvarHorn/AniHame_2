@@ -54,6 +54,7 @@ app.get("/api/mapping/:anilistId", async (req, res) => {
   }
 });
 
+
 app.post("/api/anilist", async (req, res) => {
   try {
     const cacheKey = `anilist_${JSON.stringify(req.body)}`;

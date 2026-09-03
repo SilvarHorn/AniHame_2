@@ -1,3 +1,4 @@
+import { isHanimeMode } from './anilist';
 
 let cachedFeed: any = null;
 let cachedSchedule: any = null;
@@ -44,7 +45,7 @@ export async function fetchLatestUpdated(page = 1, perPage = 24) {
       if (uniqueAnimeIds.has(item.id)) continue;
       
       const details = scheduleMap.get(item.id);
-      if (details && !details.isAdult) {
+      if (details && (isHanimeMode() ? details.isAdult : !details.isAdult)) {
         uniqueAnimeIds.add(item.id);
         
         // Map to AnimeMedia format

@@ -1,3 +1,4 @@
+import { isHanimeMode } from "../../api/anilist";
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { AnimeMedia } from '../../types';
@@ -5,7 +6,7 @@ import { Star, MonitorPlay, Calendar, Clock, PlayCircle, Info } from 'lucide-rea
 import { cn } from '../../lib/utils';
 
 export function AnimeInfo({ anime, className, hideTitle = false }: { anime: AnimeMedia, className?: string, hideTitle?: boolean }) {
-  const title = anime.title.english || anime.title.romaji;
+  const title = isHanimeMode() ? (anime.title.romaji || anime.title.english) : (anime.title.english || anime.title.romaji);
   
   const [kitsuScore, setKitsuScore] = useState<number | null>(null);
   const [malScore, setMalScore] = useState<number | null>(null);

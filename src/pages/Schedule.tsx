@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { format, fromUnixTime, isYesterday, isToday, isTomorrow, addDays, isSameDay, formatDistanceToNowStrict } from 'date-fns';
-import { fetchAnilist, AIRING_SCHEDULE_QUERY } from '../api/anilist';
+import { fetchAnilist, AIRING_SCHEDULE_QUERY, isHanimeMode } from '../api/anilist';
 import { AiringSchedule } from '../types';
 import { Link } from 'react-router-dom';
 import { Clock, Play, Check, Sparkles } from 'lucide-react';
@@ -94,7 +94,7 @@ export default function Schedule() {
           });
           
           if (data?.Page?.airingSchedules) {
-            const filtered = data.Page.airingSchedules.filter((s: any) => !s.media?.isAdult);
+            const filtered = data.Page.airingSchedules.filter((s: any) => isHanimeMode() ? s.media?.isAdult : !s.media?.isAdult);
             allDaySchedules = [...allDaySchedules, ...filtered];
           }
           
@@ -189,7 +189,7 @@ export default function Schedule() {
                   >
                     {/* Image */}
                     <div className="relative w-[84px] h-[116px] shrink-0 rounded-xl overflow-hidden bg-gray-900 border border-white/5">
-                      <img src={item.media.coverImage?.large} alt={item.media.title.english || item.media.title.romaji} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                      <img src={item.media.coverImage?.large} alt={isHanimeMode() ? (item.media.title.romaji || item.media.title.english) : (item.media.title.english || item.media.title.romaji)} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                       <div className="absolute top-1.5 left-1.5 bg-primary text-[#0B0C0F] text-[9px] font-black px-1.5 py-0.5 rounded-md z-10 leading-none shadow-md">
                         EP {item.episode}
                       </div>
@@ -198,7 +198,7 @@ export default function Schedule() {
                     {/* Info */}
                     <div className="flex flex-col flex-1 py-1.5 min-w-0 justify-center">
                       <h3 className="text-sm font-bold text-white line-clamp-2 group-hover:text-primary transition-colors leading-tight mb-2">
-                        {item.media.title.english || item.media.title.romaji}
+                        {isHanimeMode() ? (item.media.title.romaji || item.media.title.english) : (item.media.title.english || item.media.title.romaji)}
                       </h3>
                       
                       <div className="flex items-center gap-2 mb-2">
