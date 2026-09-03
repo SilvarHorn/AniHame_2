@@ -290,7 +290,6 @@ app.get("/api/filler/:animeName", async (req, res) => {
   }
 });
 
-export default app;
 
 const NHENTAI_KEY = 'nhk_fRMH-nP5PSYt3Y3x5o4XZecYQY-19jK6it-5MHjtVONElYxm';
 const NHENTAI_HEADERS = {
@@ -415,3 +414,5 @@ app.get("/api/zhentube", async (req, res) => {
 
   return res.status(404).json({ error: "Video source not found" });
 });
+
+export default app;
