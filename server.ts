@@ -33,6 +33,9 @@ async function startServer() {
   // Mount the API routes
   app.use(apiApp);
 
+  // Serve static public assets directly (e.g. favicons, logo.svg)
+  app.use(express.static(path.join(process.cwd(), 'public')));
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
