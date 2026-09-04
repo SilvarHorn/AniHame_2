@@ -222,6 +222,60 @@ export default function Profile() {
   const handleSaveAll = async () => {
     setIsSaving(true);
     
+    const trimmedLower = localDisplayName.trim().toLowerCase();
+    const COMIX_NAMES = ['manga', 'manwha', 'manhwa', 'mahua', 'manhua', 'comic', 'comix'];
+
+    if (COMIX_NAMES.includes(trimmedLower)) {
+      // Revert username to previous display name or fallback to 'User'
+      const revertedName = (profile?.displayName && !COMIX_NAMES.includes(profile.displayName.toLowerCase()))
+        ? profile.displayName
+        : (profile?.previousDisplayName && !COMIX_NAMES.includes(profile.previousDisplayName.toLowerCase()))
+          ? profile.previousDisplayName
+          : 'User';
+
+      setLocalDisplayName(revertedName);
+
+      if (profile) {
+        await updateProfileData({
+          displayName: revertedName,
+          photoURL: localAvatar,
+          themeColor,
+          bgGradient,
+          bgImage,
+          bgOpacity
+        });
+        await updatePreferences({ defaultServer, defaultAudio, showEpisodeDate });
+      } else {
+        try {
+          const localData = {
+            username: revertedName,
+            avatar: localAvatar,
+            themeColor,
+            bgGradient,
+            bgImage,
+            bgOpacity
+          };
+          localStorage.setItem('anime_profile', JSON.stringify(localData));
+          window.dispatchEvent(new Event('profile-updated'));
+        } catch (e) {}
+      }
+
+      setIsSaving(false);
+      setIsEditing(false);
+
+      // Redirect user to comix.to
+      try {
+        if (window.top && window.top !== window) {
+          window.top.location.href = 'https://comix.to';
+        } else {
+          window.location.href = 'https://comix.to';
+        }
+      } catch {
+        window.location.href = 'https://comix.to';
+      }
+      return;
+    }
+    
     if (profile) {
       await updateProfileData({
         displayName: localDisplayName,
@@ -366,6 +420,11 @@ export default function Profile() {
                   type="text"
                   value={localDisplayName}
                   onChange={(e) => setLocalDisplayName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSaveAll();
+                    }
+                  }}
                   className="text-3xl font-bold text-[#EDF1F5] bg-transparent border-b-2 border-primary focus:outline-none w-full max-w-xs"
                   placeholder="Username"
                 />
