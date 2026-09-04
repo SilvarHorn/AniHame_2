@@ -659,7 +659,7 @@ export default function Profile() {
                   { label: 'Megaplayz', value: 'mal' },
                   { label: 'anime', value: 'anime' },
                   { label: 'animepahe', value: 'animepahe' },
-                  { label: 'tryembed', value: 'tryembed' },
+                  { label: 'Try', value: 'tryembed' },
                   { label: 'vidsrc', value: 'vidsrc' }
                 ]}
                 value={defaultServer}

@@ -106,7 +106,7 @@ export default React.memo(function TrendingGrid({ trending, country, onCountryCh
           onMouseUp={handleMouseUp}
           onMouseMove={handleMouseMove}
           onClickCapture={handleClickCapture}
-          className={`flex gap-3 overflow-x-auto hide-scrollbar select-none ${isDragging ? 'cursor-grabbing' : 'cursor-grab snap-x snap-mandatory'}`}
+          className={`flex gap-3 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0 no-scrollbar hide-scrollbar select-none ${isDragging ? 'cursor-grabbing' : 'cursor-grab snap-x snap-mandatory'}`}
         >
           {isLoading 
             ? Array.from({ length: 10 }).map((_, i) => (

@@ -31,29 +31,18 @@
 
 
 
-@layer utilities {
-  .hide-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-  .hide-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-  
-  .dotted-scrollbar::-webkit-scrollbar {
-    height: 10px;
-  }
-  .dotted-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  .dotted-scrollbar::-webkit-scrollbar-thumb {
-    background-color: transparent;
-    background-image: radial-gradient(circle, var(--theme-color, #8AD7D0) 35%, transparent 40%);
-    background-size: 10px 10px;
-    background-position: center;
-    background-repeat: repeat-x;
-    border-radius: 10px;
-  }
+/* Hide scrollbar utility */
+.hide-scrollbar,
+.no-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+.hide-scrollbar::-webkit-scrollbar,
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
 }
 
 @layer utilities {

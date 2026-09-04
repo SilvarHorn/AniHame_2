@@ -551,7 +551,7 @@ export default function Watch() {
                       serverType === 'tryembed' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
                     )}
                   >
-                    tryembed
+                    Try
                   </button>
                   <button
                     onClick={() => setServerType('vidsrc')}
