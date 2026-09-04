@@ -1,7 +1,7 @@
 import { isHanimeMode } from "../../api/anilist";
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Search, User, Tv, Menu, X } from 'lucide-react';
+import { Search, User, Tv, Menu, X, RotateCcw } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { fetchAnilist, SEARCH_ANIME_QUERY } from '../../api/anilist';
 import { AnimeMedia } from '../../types';
@@ -10,8 +10,8 @@ export default function Navbar() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [previewResults, setPreviewResults] = useState<AnimeMedia[]>([]);
-const [showPreview, setShowPreview] = useState(false);
-  const { profile } = useAuth();
+  const [showPreview, setShowPreview] = useState(false);
+  const { profile, updateProfileData } = useAuth();
   const [localAvatar, setLocalAvatar] = useState('');
   const [localUsername, setLocalUsername] = useState('');
   const navigate = useNavigate();
@@ -39,7 +39,49 @@ const [showPreview, setShowPreview] = useState(false);
   const displayAvatar = profile?.photoURL || localAvatar;
   const displayUsername = profile?.username || localUsername || 'Profile';
   const location = useLocation();
-  const isNHentai = displayUsername === 'nhentai';
+  
+  const currentName = (profile?.displayName || localUsername || '').toLowerCase();
+  const isHanime = isHanimeMode() || currentName === 'hanime';
+  const isNHentai = currentName === 'nhentai';
+  const isAdultMode = isHanime || isNHentai;
+  const isHomePage = location.pathname === '/' || location.pathname === '';
+
+  const handleRevert = async (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    const rawPrev = profile?.previousDisplayName?.trim();
+    const targetName = (rawPrev && rawPrev.toLowerCase() !== 'hanime' && rawPrev.toLowerCase() !== 'nhentai')
+      ? rawPrev
+      : 'User';
+
+    try {
+      const stored = localStorage.getItem('app_user_profile_data');
+      const userProf = stored ? JSON.parse(stored) : {};
+      userProf.displayName = targetName;
+      userProf.previousDisplayName = null;
+      localStorage.setItem('app_user_profile_data', JSON.stringify(userProf));
+
+      const navSaved = localStorage.getItem('anime_profile');
+      const navProf = navSaved ? JSON.parse(navSaved) : {};
+      navProf.username = targetName;
+      localStorage.setItem('anime_profile', JSON.stringify(navProf));
+    } catch (err) {
+      console.error('Error updating localStorage on revert:', err);
+    }
+
+    await updateProfileData({
+      displayName: targetName,
+      previousDisplayName: null
+    });
+
+    window.dispatchEvent(new Event('profile-updated'));
+    window.dispatchEvent(new Event('storage'));
+
+    window.location.href = '/';
+  };
 
   const getNavClass = (path: string) => {
     const isActive = path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
@@ -130,10 +172,23 @@ const [showPreview, setShowPreview] = useState(false);
             </div>
           )}
 
-          <div className="hidden md:flex items-center gap-4">
+          <div className="hidden md:flex items-center gap-3">
+            {isAdultMode && isHomePage && (
+              <button
+                type="button"
+                id="revert-mode-btn"
+                onClick={handleRevert}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/15 hover:bg-red-500/25 active:bg-red-500/35 text-red-400 border border-red-500/30 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-sm hover:scale-[1.02] active:scale-95"
+                title={`Revert to ${profile?.previousDisplayName || 'User'}`}
+              >
+                <RotateCcw size={13} className="shrink-0" />
+                <span>Revert</span>
+              </button>
+            )}
             <Link 
               to="/profile"
-              className="flex items-center gap-3 ml-2 group"
+              id="profile-nav-btn"
+              className="flex items-center gap-3 ml-1 group"
             >
               {displayAvatar ? (
                 <img src={displayAvatar} alt="Profile" className="w-8 h-8 rounded-full object-cover border-2 border-gray-800 group-hover:border-primary transition-colors" />
@@ -144,11 +199,38 @@ const [showPreview, setShowPreview] = useState(false);
             </Link>
           </div>
 
-          {!isNHentai && (<div className="md:hidden flex items-center">
-            <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="text-gray-400 hover:text-white">
-              {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-            </button>
-          </div>)}
+          <div className="md:hidden flex items-center gap-2">
+            {isAdultMode && isHomePage && (
+              <button
+                type="button"
+                id="revert-mode-btn-mobile"
+                onClick={handleRevert}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-red-500/20 hover:bg-red-500/30 active:bg-red-500/40 text-red-400 border border-red-500/30 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95"
+                title={`Revert to ${profile?.previousDisplayName || 'User'}`}
+              >
+                <RotateCcw size={12} className="shrink-0" />
+                <span>Revert</span>
+              </button>
+            )}
+            {isNHentai && (
+              <Link 
+                to="/profile"
+                id="profile-nav-btn-mobile-nhentai"
+                className="flex items-center gap-2 group p-1"
+              >
+                {displayAvatar ? (
+                  <img src={displayAvatar} alt="Profile" className="w-7 h-7 rounded-full object-cover border-2 border-gray-800 group-hover:border-primary transition-colors" />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center text-[9px] font-bold text-[#0B0C0F]">ME</div>
+                )}
+              </Link>
+            )}
+            {!isNHentai && (
+              <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="text-gray-400 hover:text-white p-1">
+                {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -188,6 +270,20 @@ const [showPreview, setShowPreview] = useState(false);
                </div>
             )}
           </div>
+          {isAdultMode && isHomePage && (
+            <button 
+              type="button"
+              id="revert-mode-btn-drawer"
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                handleRevert();
+              }}
+              className="w-full flex items-center justify-center gap-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 px-4 py-2 rounded-full text-sm font-bold transition-colors border border-red-500/30 mb-2 cursor-pointer"
+            >
+              <RotateCcw size={15} />
+              <span>Revert to {profile?.previousDisplayName || 'User'}</span>
+            </button>
+          )}
           <Link 
             to="/profile"
             onClick={() => setIsMobileMenuOpen(false)}
