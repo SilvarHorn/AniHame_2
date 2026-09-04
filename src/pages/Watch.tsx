@@ -19,7 +19,7 @@ export default function Watch() {
   const [isListView, setIsListView] = useState(false);
   const [episodeChunk, setEpisodeChunk] = useState(0);
   const [audioType, setAudioType] = useState<'sub' | 'dub'>('sub');
-  const [serverType, setServerType] = useState<'mal' | 'anime' | 'animepahe' | 'tryembed' | 'vidsrc' | 'zhentube'>('mal');
+  const [serverType, setServerType] = useState<'mal' | 'kozo' | 'anime' | 'animepahe' | 'tryembed' | 'vidsrc' | 'zhentube'>('mal');
   const [imdbId, setImdbId] = useState<string | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [kitsuEpisodes, setKitsuEpisodes] = useState<any[]>([]);
@@ -298,6 +298,10 @@ export default function Watch() {
     } else {
       iframeUrl = `https://vidsrc2.ru/embed/tv/${safeImdb}/1/${safeEpisode}`;
     }
+  } else if (serverType === 'kozo') {
+    const rawMalId = anime?.idMal || animeId;
+    const malId = encodeURIComponent(String(rawMalId).trim().replace(/[^a-zA-Z0-9_-]/g, ''));
+    iframeUrl = `https://zokoanime.video/stream/mal/${malId}/${safeEpisode}/${safeAudio}?color=35d5bf`;
   } else if (serverType === 'anime') {
     iframeUrl = `https://vidnest.fun/anime/${anilistIdForStream}/${safeEpisode}/${safeAudio}`;
   } else if (serverType === 'animepahe') {
@@ -313,11 +317,13 @@ export default function Watch() {
     iframeUrl = `https://megaplay.buzz/stream/mal/${malId}/${safeEpisode}/${safeAudio}`;
   }
 
-  // Apply sandbox attribute only to Megaplayz (mal), VidSrc, and TryEmbed
-  const isSandboxedServer = serverType === 'mal' || serverType === 'vidsrc' || serverType === 'tryembed';
+  // Apply sandbox attribute to Megaplayz (mal), Kozo, VidSrc, and TryEmbed
+  const isSandboxedServer = serverType === 'mal' || serverType === 'kozo' || serverType === 'vidsrc' || serverType === 'tryembed';
 
   const handleIframeError = () => {
     if (serverType === 'mal') {
+      setServerType('kozo');
+    } else if (serverType === 'kozo') {
       setServerType('anime');
     } else if (serverType === 'anime') {
       setServerType('animepahe');
@@ -449,6 +455,7 @@ export default function Watch() {
                 scrolling="no"
                 allowFullScreen
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                referrerPolicy="no-referrer"
                 sandbox={isSandboxedServer ? "allow-scripts allow-same-origin allow-forms allow-presentation" : undefined}
                 className="absolute inset-0 w-full h-full border-none"
                 title={`Watch ${anime.title.romaji} Episode ${currentEp}`}
@@ -554,6 +561,17 @@ export default function Watch() {
                     Try
                   </button>
                   <button
+                    onClick={() => setServerType('kozo')}
+                    disabled={!anime?.idMal && !animeId}
+                    className={cn(
+                      "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                      serverType === 'kozo' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                    )}
+                    title={!anime?.idMal ? "MAL ID not available for this anime" : undefined}
+                  >
+                    Kozo
+                  </button>
+                  <button
                     onClick={() => setServerType('vidsrc')}
                     disabled={!imdbId}
                     className={cn(
@@ -567,7 +585,7 @@ export default function Watch() {
                 </div>
               )}
               {/* Audio Type Selector */}
-              {(serverType === 'mal' || serverType === 'anime' || serverType === 'animepahe' || serverType === 'tryembed') && (
+              {(serverType === 'mal' || serverType === 'kozo' || serverType === 'anime' || serverType === 'animepahe' || serverType === 'tryembed') && (
                 <div className="flex items-center bg-gray-800 rounded-lg p-1 w-full sm:w-auto justify-center mt-2 sm:mt-0">
                   <button
                     onClick={() => setAudioType('sub')}

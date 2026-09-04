@@ -30,7 +30,7 @@ export default function Profile() {
   const [localAvatar, setLocalAvatar] = useState('');
   
   // Preferences state
-  const [defaultServer, setDefaultServer] = useState<'mal' | 'megaplayz' | 'anime' | 'animepahe' | 'tryembed' | 'vidsrc'>('mal');
+  const [defaultServer, setDefaultServer] = useState<'mal' | 'megaplayz' | 'anime' | 'animepahe' | 'tryembed' | 'kozo' | 'vidsrc'>('mal');
   const [defaultAudio, setDefaultAudio] = useState<'sub' | 'dub'>('sub');
   const [showEpisodeDate, setShowEpisodeDate] = useState<boolean>(true);
   
@@ -660,10 +660,11 @@ export default function Profile() {
                   { label: 'anime', value: 'anime' },
                   { label: 'animepahe', value: 'animepahe' },
                   { label: 'Try', value: 'tryembed' },
+                  { label: 'Kozo', value: 'kozo' },
                   { label: 'vidsrc', value: 'vidsrc' }
                 ]}
                 value={defaultServer}
-                onChange={(val) => { setDefaultServer(val as 'mal' | 'megaplayz' | 'anime' | 'animepahe' | 'tryembed' | 'vidsrc'); if(!isEditing) setIsEditing(true); }}
+                onChange={(val) => { setDefaultServer(val as 'mal' | 'megaplayz' | 'anime' | 'animepahe' | 'tryembed' | 'kozo' | 'vidsrc'); if(!isEditing) setIsEditing(true); }}
               />
             </div>
 
