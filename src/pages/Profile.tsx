@@ -224,12 +224,19 @@ export default function Profile() {
     
     const trimmedLower = localDisplayName.trim().toLowerCase();
     const COMIX_NAMES = ['manga', 'manwha', 'manhwa', 'mahua', 'manhua', 'comic', 'comix'];
+    const NOVEL_NAMES = ['novel', 'ln', 'light novel', 'lightnovel'];
 
-    if (COMIX_NAMES.includes(trimmedLower)) {
+    const isComixRedirect = COMIX_NAMES.includes(trimmedLower);
+    const isNovelRedirect = NOVEL_NAMES.includes(trimmedLower);
+
+    if (isComixRedirect || isNovelRedirect) {
+      const targetUrl = isComixRedirect ? 'https://comix.to' : 'https://novelarchive.cc/';
+      const ALL_TRIGGER_NAMES = [...COMIX_NAMES, ...NOVEL_NAMES, 'hanime', 'nhentai'];
+
       // Revert username to previous display name or fallback to 'User'
-      const revertedName = (profile?.displayName && !COMIX_NAMES.includes(profile.displayName.toLowerCase()))
+      const revertedName = (profile?.displayName && !ALL_TRIGGER_NAMES.includes(profile.displayName.toLowerCase()))
         ? profile.displayName
-        : (profile?.previousDisplayName && !COMIX_NAMES.includes(profile.previousDisplayName.toLowerCase()))
+        : (profile?.previousDisplayName && !ALL_TRIGGER_NAMES.includes(profile.previousDisplayName.toLowerCase()))
           ? profile.previousDisplayName
           : 'User';
 
@@ -263,15 +270,15 @@ export default function Profile() {
       setIsSaving(false);
       setIsEditing(false);
 
-      // Redirect user to comix.to
+      // Redirect user to the designated destination
       try {
         if (window.top && window.top !== window) {
-          window.top.location.href = 'https://comix.to';
+          window.top.location.href = targetUrl;
         } else {
-          window.location.href = 'https://comix.to';
+          window.location.href = targetUrl;
         }
       } catch {
-        window.location.href = 'https://comix.to';
+        window.location.href = targetUrl;
       }
       return;
     }
