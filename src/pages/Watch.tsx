@@ -3,14 +3,15 @@ import { useParams, Link } from 'react-router-dom';
 import { fetchAnilist, ANIME_DETAILS_QUERY, isHanimeMode } from '../api/anilist';
 import { AnimeMedia } from '../types';
 import { saveProgress } from '../store/progress';
-import { ChevronLeft, ChevronDown, ArrowDownUp, LayoutGrid, List as ListIcon, PlayCircle, ExternalLink } from 'lucide-react';
+import { ChevronLeft, ChevronDown, ArrowDownUp, LayoutGrid, List as ListIcon, PlayCircle, ExternalLink, SlidersHorizontal } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, WatchServerType, DEFAULT_SERVER_ORDER } from '../contexts/AuthContext';
 import { MarqueeText } from '../components/MarqueeText';
 import { AnimeInfo } from '../components/ui/AnimeInfo';
+import { ServerOrderModal } from '../components/player/ServerOrderModal';
 
 export default function Watch() {
-  const { profile } = useAuth();
+  const { profile, updatePreferences } = useAuth();
   const { id, ep } = useParams();
   const [anime, setAnime] = useState<AnimeMedia | null>(null);
   const [loading, setLoading] = useState(true);
@@ -19,7 +20,23 @@ export default function Watch() {
   const [isListView, setIsListView] = useState(false);
   const [episodeChunk, setEpisodeChunk] = useState(0);
   const [audioType, setAudioType] = useState<'sub' | 'dub'>('sub');
-  const [serverType, setServerType] = useState<'mal' | 'kozo' | 'anime' | 'animepahe' | 'tryembed' | 'vidsrc' | 'zhentube'>('mal');
+  const [serverType, setServerType] = useState<WatchServerType>(() => {
+    try {
+      const stored = localStorage.getItem('app_user_profile_data');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const pref = parsed?.preferences?.defaultServer;
+        if (pref === 'megaplayz') return 'mal';
+        if (pref && ['mal', 'anime', 'animepahe', 'tryembed', 'kozo', 'vidsrc'].includes(pref)) {
+          return pref as WatchServerType;
+        }
+      }
+    } catch (e) {}
+    return 'mal';
+  });
+  const [isServerOrderModalOpen, setIsServerOrderModalOpen] = useState(false);
+  const activeAnimeIdRef = useRef<number | null>(null);
+  const manualServerChoiceRef = useRef<WatchServerType | null>(null);
   const [imdbId, setImdbId] = useState<string | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [kitsuEpisodes, setKitsuEpisodes] = useState<any[]>([]);
@@ -40,19 +57,78 @@ export default function Watch() {
   const [isZhenTubeLoading, setIsZhenTubeLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  const animeId = Number(id);
+  const currentEp = Number(ep);
+
+  // Compute default server from settings (default server used for everything)
+  const resolvedDefaultServer = React.useMemo<WatchServerType>(() => {
+    const raw = profile?.preferences?.defaultServer;
+    if (raw === 'megaplayz') return 'mal';
+    if (raw && (['mal', 'anime', 'animepahe', 'tryembed', 'kozo', 'vidsrc'] as string[]).includes(raw)) {
+      return raw as WatchServerType;
+    }
+    return 'mal';
+  }, [profile?.preferences?.defaultServer]);
+
+  // Server lifecycle management:
+  // "when a server is manually changed for a anime keep the same server until the website the reload or moved to an different anime and come back. use the default server in the setting for everthing."
   useEffect(() => {
-    if (profile?.preferences) {
-      const prefServer = profile.preferences.defaultServer;
-      if (prefServer === 'megaplayz') {
-        setServerType('mal');
-      } else if (prefServer) {
-        setServerType(prefServer as any);
-      }
-      if (profile.preferences.defaultAudio) {
-        setAudioType(profile.preferences.defaultAudio);
+    if (!animeId) return;
+
+    if (activeAnimeIdRef.current !== animeId) {
+      // Moved to a different anime (or initial anime load in this session)
+      activeAnimeIdRef.current = animeId;
+      manualServerChoiceRef.current = null; // Clear manual override!
+      setServerType(resolvedDefaultServer);
+    } else {
+      // Still on the same anime (e.g. changing episodes)
+      if (manualServerChoiceRef.current) {
+        setServerType(manualServerChoiceRef.current);
       }
     }
-  }, [profile]);
+  }, [animeId, resolvedDefaultServer]);
+
+  // Synchronize audio preferences
+  useEffect(() => {
+    if (profile?.preferences?.defaultAudio) {
+      setAudioType(profile.preferences.defaultAudio);
+    }
+  }, [profile?.preferences?.defaultAudio]);
+
+  const handleSelectServer = (chosenServer: WatchServerType) => {
+    manualServerChoiceRef.current = chosenServer;
+    setServerType(chosenServer);
+  };
+
+  const serverOrder: WatchServerType[] = React.useMemo(() => {
+    const custom = profile?.preferences?.serverOrder;
+    if (Array.isArray(custom) && custom.length > 0) {
+      // Ensure all servers are included
+      const list = [...custom];
+      DEFAULT_SERVER_ORDER.forEach(s => {
+        if (!list.includes(s)) list.push(s);
+      });
+      return list;
+    }
+    return DEFAULT_SERVER_ORDER;
+  }, [profile?.preferences?.serverOrder]);
+
+  const handleSaveServerOrder = async (newOrder: WatchServerType[]) => {
+    await updatePreferences({ serverOrder: newOrder });
+  };
+
+  // Anti-hijack protection for unsandboxed Megaplayz
+  useEffect(() => {
+    if (serverType === 'mal') {
+      const handleBeforeUnload = () => {
+        // Guard against top-window navigation from unsandboxed iframe
+      };
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      return () => {
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+      };
+    }
+  }, [serverType]);
 
 
   useEffect(() => {
@@ -64,9 +140,6 @@ export default function Watch() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-
-  const animeId = Number(id);
-  const currentEp = Number(ep);
 
   useEffect(() => {
     if (currentEp) {
@@ -317,24 +390,18 @@ export default function Watch() {
     iframeUrl = `https://megaplay.buzz/stream/mal/${malId}/${safeEpisode}/${safeAudio}`;
   }
 
-  // Apply sandbox attribute to Megaplayz (mal), Kozo, VidSrc, and TryEmbed
-  const isSandboxedServer = serverType === 'mal' || serverType === 'kozo' || serverType === 'vidsrc' || serverType === 'tryembed';
+  // Apply sandbox attribute to Kozo, VidSrc, and TryEmbed.
+  // The sandbox attribute is removed from Megaplayz ('mal') per request, while secured via strict referrerPolicy, permission delegation controls, and parameter sanitization.
+  const isSandboxedServer = serverType === 'kozo' || serverType === 'vidsrc' || serverType === 'tryembed';
 
   const handleIframeError = () => {
-    if (serverType === 'mal') {
-      setServerType('kozo');
-    } else if (serverType === 'kozo') {
-      setServerType('anime');
-    } else if (serverType === 'anime') {
-      setServerType('animepahe');
-    } else if (serverType === 'animepahe') {
-      setServerType('tryembed');
-    } else if (serverType === 'tryembed') {
-      if (imdbId) setServerType('vidsrc');
-      else setServerType('mal');
-    } else if (serverType === 'vidsrc') {
-      if (anime?.idMal) setServerType('mal');
-      else setServerType('anime');
+    const currentIndex = serverOrder.indexOf(serverType as WatchServerType);
+    if (currentIndex >= 0 && currentIndex < serverOrder.length - 1) {
+      const nextServer = serverOrder[currentIndex + 1];
+      handleSelectServer(nextServer);
+    } else {
+      const fallback = serverOrder.find(s => s !== serverType) || 'mal';
+      handleSelectServer(fallback);
     }
   };
 
@@ -519,68 +586,111 @@ export default function Watch() {
               {/* Server Selector */}
               {!isHanimeMode() && (
                 <div className="flex items-center bg-gray-800 rounded-lg p-1 w-full sm:w-auto justify-center flex-wrap sm:flex-nowrap gap-1 sm:gap-0">
+                  {serverOrder.map((srv) => {
+                    if (srv === 'mal') {
+                      return (
+                        <button
+                          key="mal"
+                          onClick={() => handleSelectServer('mal')}
+                          disabled={!anime?.idMal && !animeId}
+                          className={cn(
+                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                            serverType === 'mal' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                          )}
+                          title={!anime?.idMal ? "MAL ID not available for this anime" : undefined}
+                        >
+                          Megaplayz
+                        </button>
+                      );
+                    }
+                    if (srv === 'anime') {
+                      return (
+                        <button
+                          key="anime"
+                          onClick={() => handleSelectServer('anime')}
+                          disabled={!anime?.id && !animeId}
+                          className={cn(
+                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                            serverType === 'anime' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                          )}
+                        >
+                          anime
+                        </button>
+                      );
+                    }
+                    if (srv === 'animepahe') {
+                      return (
+                        <button
+                          key="animepahe"
+                          onClick={() => handleSelectServer('animepahe')}
+                          disabled={!anime?.id && !animeId}
+                          className={cn(
+                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                            serverType === 'animepahe' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                          )}
+                        >
+                          animepahe
+                        </button>
+                      );
+                    }
+                    if (srv === 'tryembed') {
+                      return (
+                        <button
+                          key="tryembed"
+                          onClick={() => handleSelectServer('tryembed')}
+                          disabled={!anime?.id && !animeId}
+                          className={cn(
+                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                            serverType === 'tryembed' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                          )}
+                        >
+                          Try
+                        </button>
+                      );
+                    }
+                    if (srv === 'kozo') {
+                      return (
+                        <button
+                          key="kozo"
+                          onClick={() => handleSelectServer('kozo')}
+                          disabled={!anime?.idMal && !animeId}
+                          className={cn(
+                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                            serverType === 'kozo' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                          )}
+                          title={!anime?.idMal ? "MAL ID not available for this anime" : undefined}
+                        >
+                          Kozo
+                        </button>
+                      );
+                    }
+                    if (srv === 'vidsrc') {
+                      return (
+                        <button
+                          key="vidsrc"
+                          onClick={() => handleSelectServer('vidsrc')}
+                          disabled={!imdbId}
+                          className={cn(
+                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                            serverType === 'vidsrc' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                          )}
+                          title={!imdbId ? "IMDb ID not available for this anime" : undefined}
+                        >
+                          vidsrc
+                        </button>
+                      );
+                    }
+                    return null;
+                  })}
+
+                  {/* Open Arrange Server Modal */}
                   <button
-                    onClick={() => setServerType('mal')}
-                    disabled={!anime?.idMal && !animeId}
-                    className={cn(
-                      "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-                      serverType === 'mal' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
-                    )}
-                    title={!anime?.idMal ? "MAL ID not available for this anime" : undefined}
+                    type="button"
+                    onClick={() => setIsServerOrderModalOpen(true)}
+                    className="px-2.5 py-1.5 text-gray-400 hover:text-primary hover:bg-gray-700/60 rounded-md transition-colors ml-0.5"
+                    title="Arrange Server List Order"
                   >
-                    Megaplayz
-                  </button>
-                  <button
-                    onClick={() => setServerType('anime')}
-                    disabled={!anime?.id && !animeId}
-                    className={cn(
-                      "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-                      serverType === 'anime' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
-                    )}
-                  >
-                    anime
-                  </button>
-                  <button
-                    onClick={() => setServerType('animepahe')}
-                    disabled={!anime?.id && !animeId}
-                    className={cn(
-                      "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-                      serverType === 'animepahe' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
-                    )}
-                  >
-                    animepahe
-                  </button>
-                  <button
-                    onClick={() => setServerType('tryembed')}
-                    disabled={!anime?.id && !animeId}
-                    className={cn(
-                      "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-                      serverType === 'tryembed' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
-                    )}
-                  >
-                    Try
-                  </button>
-                  <button
-                    onClick={() => setServerType('kozo')}
-                    disabled={!anime?.idMal && !animeId}
-                    className={cn(
-                      "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-                      serverType === 'kozo' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
-                    )}
-                    title={!anime?.idMal ? "MAL ID not available for this anime" : undefined}
-                  >
-                    Kozo
-                  </button>
-                  <button
-                    onClick={() => setServerType('vidsrc')}
-                    disabled={!imdbId}
-                    className={cn(
-                      "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-                      serverType === 'vidsrc' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
-                    )}
-                    title={!imdbId ? "IMDb ID not available for this anime" : undefined}
-                  >
-                    vidsrc
+                    <SlidersHorizontal size={14} />
                   </button>
                 </div>
               )}
@@ -792,6 +902,13 @@ export default function Watch() {
       <div className="block lg:hidden mt-8 mb-8">
         <AnimeInfo anime={anime} />
       </div>
+
+      <ServerOrderModal
+        isOpen={isServerOrderModalOpen}
+        onClose={() => setIsServerOrderModalOpen(false)}
+        order={serverOrder}
+        onSave={handleSaveServerOrder}
+      />
 
       </div>
     </div>

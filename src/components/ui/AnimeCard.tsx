@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { Star, Play } from 'lucide-react';
 import { AnimeMedia } from '../../types';
 import { MarqueeText } from '../MarqueeText';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface AnimeCardProps {
   key?: React.Key;
@@ -15,6 +16,10 @@ interface AnimeCardProps {
 
 function AnimeCardComponent({ anime, showProgress, progressEpisode, orientation = 'portrait' }: AnimeCardProps) {
   const [isHovered, setIsHovered] = React.useState(false);
+  const { profile } = useAuth();
+
+  const cardBorder = profile?.preferences?.cardBorder;
+  const isCustomBorder = cardBorder?.mode === 'custom' && Boolean(cardBorder?.color);
 
   const title = isHanimeMode() ? (anime.title.romaji || anime.title.english) : (anime.title.english || anime.title.romaji);
   
@@ -26,10 +31,22 @@ function AnimeCardComponent({ anime, showProgress, progressEpisode, orientation 
     : (anime.episodes ? `Ep ${anime.episodes}` : '');
   const subtitle = [formatStr, epStr].filter(Boolean).join(' • ');
 
+  const borderStyle: React.CSSProperties = isCustomBorder ? {
+    borderColor: cardBorder.color,
+    borderWidth: `${Math.max(1, Math.min(10, cardBorder.width || 2))}px`,
+    borderStyle: 'solid',
+    boxShadow: isHovered 
+      ? `0 12px 28px -4px ${cardBorder.color}40, 0 8px 12px -6px ${cardBorder.color}30` 
+      : undefined
+  } : {};
+
   return (
     <Link 
       to={showProgress && progressEpisode ? `/watch/${anime.id}/${progressEpisode}` : `/anime/${anime.id}`}
-      className="flex flex-col group cursor-pointer bg-[#0F1115] rounded-2xl overflow-hidden border border-white/5 shadow-lg transition-transform hover:-translate-y-1 hover:shadow-xl hover:shadow-primary/10" 
+      style={borderStyle}
+      className={`flex flex-col group cursor-pointer bg-[#0F1115] rounded-2xl overflow-hidden shadow-lg transition-all duration-200 hover:-translate-y-1 ${
+        isCustomBorder ? '' : 'border border-white/5 hover:shadow-xl hover:shadow-primary/10'
+      }`} 
       draggable={false}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}

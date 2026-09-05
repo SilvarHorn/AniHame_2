@@ -1,4 +1,5 @@
 import React from 'react';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface AnimeCardSkeletonProps {
   key?: React.Key;
@@ -7,9 +8,24 @@ interface AnimeCardSkeletonProps {
 
 export default function AnimeCardSkeleton({ orientation = 'portrait' }: AnimeCardSkeletonProps) {
   const isLandscape = orientation === 'landscape';
+  const { profile } = useAuth();
+
+  const cardBorder = profile?.preferences?.cardBorder;
+  const isCustomBorder = cardBorder?.mode === 'custom' && Boolean(cardBorder?.color);
+
+  const borderStyle: React.CSSProperties = isCustomBorder ? {
+    borderColor: cardBorder.color,
+    borderWidth: `${Math.max(1, Math.min(10, cardBorder.width || 2))}px`,
+    borderStyle: 'solid',
+  } : {};
   
   return (
-    <div className="flex flex-col bg-[#0F1115] rounded-2xl overflow-hidden border border-white/5 shadow-lg animate-pulse">
+    <div 
+      style={borderStyle}
+      className={`flex flex-col bg-[#0F1115] rounded-2xl overflow-hidden shadow-lg animate-pulse ${
+        isCustomBorder ? '' : 'border border-white/5'
+      }`}
+    >
       <div className={`${isLandscape ? 'aspect-[16/9]' : 'aspect-[3/4]'} relative overflow-hidden bg-gray-800`}>
         {/* Soft bottom gradient mock */}
         <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-[#0F1115] via-transparent to-transparent opacity-90" />

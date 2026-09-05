@@ -1,14 +1,15 @@
 import 'react-easy-crop/react-easy-crop.css';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, LogOut, LogIn, Save, Mail, Key, Edit3, Camera, X, Check } from 'lucide-react';
+import { User, LogOut, LogIn, Save, Mail, Key, Edit3, Camera, X, Check, Square, RotateCcw, SlidersHorizontal } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Cropper from 'react-easy-crop';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, WatchServerType, DEFAULT_SERVER_ORDER, DEFAULT_CARD_BORDER } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import AnimeCard from '../components/ui/AnimeCard';
 import { MyListStatus, getMyList, MyListItem } from '../utils/myList';
 import SingleSelect from '../components/ui/SingleSelect';
+import { ServerOrderManager } from '../components/player/ServerOrderManager';
 import { cn } from '../lib/utils';
 
 const TABS: { label: string; value: MyListStatus | 'ALL' }[] = [
@@ -33,6 +34,10 @@ export default function Profile() {
   const [defaultServer, setDefaultServer] = useState<'mal' | 'megaplayz' | 'anime' | 'animepahe' | 'tryembed' | 'kozo' | 'vidsrc'>('mal');
   const [defaultAudio, setDefaultAudio] = useState<'sub' | 'dub'>('sub');
   const [showEpisodeDate, setShowEpisodeDate] = useState<boolean>(true);
+  const [serverOrder, setServerOrder] = useState<WatchServerType[]>(DEFAULT_SERVER_ORDER);
+  const [cardBorderMode, setCardBorderMode] = useState<'default' | 'custom'>('default');
+  const [cardBorderColor, setCardBorderColor] = useState('#35D5BF');
+  const [cardBorderWidth, setCardBorderWidth] = useState(2);
   
   // Theme state
   const [themeColor, setThemeColor] = useState('#8AD7D0');
@@ -69,6 +74,14 @@ export default function Profile() {
       setDefaultServer(profile.preferences?.defaultServer || 'mal');
       setDefaultAudio(profile.preferences?.defaultAudio || 'sub');
       setShowEpisodeDate(profile.preferences?.showEpisodeDate ?? true);
+      if (profile.preferences?.serverOrder) {
+        setServerOrder(profile.preferences.serverOrder);
+      }
+      if (profile.preferences?.cardBorder) {
+        setCardBorderMode(profile.preferences.cardBorder.mode || 'default');
+        setCardBorderColor(profile.preferences.cardBorder.color || '#35D5BF');
+        setCardBorderWidth(profile.preferences.cardBorder.width || 2);
+      }
       setThemeColor(profile.themeColor || '#8AD7D0');
       setBgGradient(profile.bgGradient || '');
       setBgImage(profile.bgImage || '');
@@ -85,6 +98,12 @@ export default function Profile() {
           if (parsed.bgGradient !== undefined) setBgGradient(parsed.bgGradient);
           if (parsed.bgImage !== undefined) setBgImage(parsed.bgImage);
           if (parsed.bgOpacity !== undefined) setBgOpacity(parsed.bgOpacity);
+          if (parsed.serverOrder) setServerOrder(parsed.serverOrder);
+          if (parsed.cardBorder) {
+            setCardBorderMode(parsed.cardBorder.mode || 'default');
+            setCardBorderColor(parsed.cardBorder.color || '#35D5BF');
+            setCardBorderWidth(parsed.cardBorder.width || 2);
+          }
         }
       } catch (e) {}
     }
@@ -251,7 +270,17 @@ export default function Profile() {
           bgImage,
           bgOpacity
         });
-        await updatePreferences({ defaultServer, defaultAudio, showEpisodeDate });
+        await updatePreferences({
+          defaultServer,
+          defaultAudio,
+          showEpisodeDate,
+          serverOrder,
+          cardBorder: {
+            mode: cardBorderMode,
+            color: cardBorderColor,
+            width: cardBorderWidth
+          }
+        });
       } else {
         try {
           const localData = {
@@ -260,7 +289,13 @@ export default function Profile() {
             themeColor,
             bgGradient,
             bgImage,
-            bgOpacity
+            bgOpacity,
+            serverOrder,
+            cardBorder: {
+              mode: cardBorderMode,
+              color: cardBorderColor,
+              width: cardBorderWidth
+            }
           };
           localStorage.setItem('anime_profile', JSON.stringify(localData));
           window.dispatchEvent(new Event('profile-updated'));
@@ -292,7 +327,17 @@ export default function Profile() {
         bgImage,
         bgOpacity
       });
-      await updatePreferences({ defaultServer, defaultAudio, showEpisodeDate });
+      await updatePreferences({
+        defaultServer,
+        defaultAudio,
+        showEpisodeDate,
+        serverOrder,
+        cardBorder: {
+          mode: cardBorderMode,
+          color: cardBorderColor,
+          width: cardBorderWidth
+        }
+      });
     } else {
       // Save to LocalStorage (Guests)
       try {
@@ -302,7 +347,13 @@ export default function Profile() {
           themeColor,
           bgGradient,
           bgImage,
-          bgOpacity
+          bgOpacity,
+          serverOrder,
+          cardBorder: {
+            mode: cardBorderMode,
+            color: cardBorderColor,
+            width: cardBorderWidth
+          }
         };
         localStorage.setItem('anime_profile', JSON.stringify(localData));
         window.dispatchEvent(new Event('profile-updated'));
@@ -765,6 +816,223 @@ export default function Profile() {
                 )} />
               </button>
             </div>
+          </div>
+
+          {/* Server List Arrangement Section */}
+          <div className="bg-gray-900/50 p-5 rounded-xl border border-white/5 mt-6">
+            <ServerOrderManager
+              order={serverOrder}
+              onChange={(newOrder) => {
+                setServerOrder(newOrder);
+                if (!isEditing) setIsEditing(true);
+              }}
+            />
+          </div>
+
+          {/* Anime Card Border Customization Section */}
+          <div className="bg-gray-900/50 p-5 rounded-xl border border-white/5 mt-6 flex flex-col gap-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/5">
+              <div>
+                <label className="block text-sm font-bold text-[#EDF1F5] flex items-center gap-2">
+                  <Square size={16} className="text-primary" />
+                  Anime Card Border Customization
+                </label>
+                <p className="text-xs text-gray-500 mt-1">
+                  Customize the border color and thickness for all anime cards displayed across the entire website
+                </p>
+              </div>
+
+              {/* Mode Toggle */}
+              <div className="flex items-center bg-gray-800 p-1 rounded-lg shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCardBorderMode('default');
+                    if (!isEditing) setIsEditing(true);
+                  }}
+                  className={cn(
+                    "px-3 py-1.5 rounded-md text-xs font-bold transition-colors",
+                    cardBorderMode === 'default'
+                      ? "bg-primary text-[#0B0C0F] shadow-sm"
+                      : "text-gray-400 hover:text-white"
+                  )}
+                >
+                  Default Border
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCardBorderMode('custom');
+                    if (!isEditing) setIsEditing(true);
+                  }}
+                  className={cn(
+                    "px-3 py-1.5 rounded-md text-xs font-bold transition-colors",
+                    cardBorderMode === 'custom'
+                      ? "bg-primary text-[#0B0C0F] shadow-sm"
+                      : "text-gray-400 hover:text-white"
+                  )}
+                >
+                  Custom Border
+                </button>
+              </div>
+            </div>
+
+            {/* Custom Settings (Color, Width, Reset) */}
+            {cardBorderMode === 'custom' ? (
+              <div className="grid md:grid-cols-2 gap-6 items-start">
+                <div className="flex flex-col gap-4">
+                  {/* Color Selector */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-2">Border Color</label>
+                    <div className="flex items-center gap-3">
+                      <div className="relative w-9 h-9 rounded-lg overflow-hidden shrink-0 border border-white/10 shadow-sm cursor-pointer">
+                        <input
+                          type="color"
+                          value={cardBorderColor}
+                          onChange={(e) => {
+                            setCardBorderColor(e.target.value);
+                            if (!isEditing) setIsEditing(true);
+                          }}
+                          className="absolute -inset-4 w-16 h-16 cursor-pointer opacity-0"
+                        />
+                        <div
+                          className="w-full h-full"
+                          style={{ backgroundColor: cardBorderColor }}
+                        />
+                      </div>
+                      <input
+                        type="text"
+                        value={cardBorderColor}
+                        onChange={(e) => {
+                          setCardBorderColor(e.target.value);
+                          if (!isEditing) setIsEditing(true);
+                        }}
+                        placeholder="#35D5BF"
+                        className="bg-[#151F2E] text-xs font-mono uppercase text-[#EDF1F5] px-3 py-2 rounded-lg outline-none border border-gray-700 focus:border-primary w-28 transition-colors"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCardBorderColor('#35D5BF');
+                          setCardBorderWidth(2);
+                          setCardBorderMode('default');
+                          if (!isEditing) setIsEditing(true);
+                        }}
+                        className="flex items-center gap-1 text-xs text-gray-400 hover:text-primary transition-colors ml-auto"
+                        title="Reset to default border"
+                      >
+                        <RotateCcw size={12} />
+                        <span>Reset to Default</span>
+                      </button>
+                    </div>
+
+                    {/* Color Presets */}
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {[
+                        { color: '#35D5BF', name: 'Kozo' },
+                        { color: '#8AD7D0', name: 'Mint' },
+                        { color: '#EF4444', name: 'Crimson' },
+                        { color: '#A855F7', name: 'Purple' },
+                        { color: '#EAB308', name: 'Gold' },
+                        { color: '#3B82F6', name: 'Blue' },
+                        { color: '#10B981', name: 'Emerald' },
+                        { color: '#F43F5E', name: 'Rose' },
+                        { color: '#FFFFFF', name: 'White' },
+                      ].map((item) => (
+                        <button
+                          key={item.color}
+                          type="button"
+                          onClick={() => {
+                            setCardBorderColor(item.color);
+                            if (!isEditing) setIsEditing(true);
+                          }}
+                          className={cn(
+                            "w-6 h-6 rounded-full border border-white/20 transition-transform",
+                            cardBorderColor.toLowerCase() === item.color.toLowerCase()
+                              ? "scale-125 ring-2 ring-white ring-offset-2 ring-offset-gray-900"
+                              : "hover:scale-110"
+                          )}
+                          style={{ backgroundColor: item.color }}
+                          title={item.name}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Border Width Slider */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-medium text-gray-400">Border Width</label>
+                      <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
+                        {cardBorderWidth}px
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="1"
+                      max="8"
+                      step="1"
+                      value={cardBorderWidth}
+                      onChange={(e) => {
+                        setCardBorderWidth(Number(e.target.value));
+                        if (!isEditing) setIsEditing(true);
+                      }}
+                      className="w-full accent-primary h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+                    />
+                    <div className="flex justify-between text-[10px] text-gray-500 mt-1 font-mono">
+                      <span>1px</span>
+                      <span>2px (Default)</span>
+                      <span>4px</span>
+                      <span>6px</span>
+                      <span>8px</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Live Card Preview */}
+                <div className="bg-[#0B0C0F] p-4 rounded-xl border border-white/5 flex flex-col items-center">
+                  <span className="text-xs font-bold text-gray-400 mb-3 self-start">
+                    Live Anime Card Border Preview:
+                  </span>
+                  <div
+                    className="w-36 bg-[#0F1115] rounded-2xl overflow-hidden shadow-lg transition-all"
+                    style={{
+                      borderColor: cardBorderColor,
+                      borderWidth: `${cardBorderWidth}px`,
+                      borderStyle: 'solid',
+                      boxShadow: `0 10px 25px -5px ${cardBorderColor}30`
+                    }}
+                  >
+                    <div className="aspect-[3/4] bg-gray-800 relative overflow-hidden flex items-center justify-center">
+                      <img
+                        src="https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx154587-n2bBgLoFSSrH.jpg"
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-[#0F1115] to-transparent opacity-90" />
+                    </div>
+                    <div className="p-2.5 pb-3">
+                      <p className="text-[11px] font-bold text-white truncate">Frieren: Beyond Journey</p>
+                      <p className="text-[10px] text-gray-400">TV • Ep 28</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between bg-[#12141A] p-4 rounded-lg border border-white/5 text-sm text-gray-400">
+                <span>Standard subtle border (`border-white/5`) is currently enabled for all anime cards.</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCardBorderMode('custom');
+                    if (!isEditing) setIsEditing(true);
+                  }}
+                  className="text-xs font-bold text-primary hover:underline"
+                >
+                  Enable Custom Border
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

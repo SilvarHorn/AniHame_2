@@ -4,13 +4,19 @@ import { WatchProgress } from '../types';
 import { Link } from 'react-router-dom';
 import { Play, X, User } from 'lucide-react';
 import AnimeCard from '../components/ui/AnimeCard';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function ContinueWatching() {
   const [progress, setProgress] = useState<WatchProgress[]>([]);
+  const { profile } = useAuth();
 
   useEffect(() => {
     setProgress(getProgress());
   }, []);
+
+  const cardBorder = profile?.preferences?.cardBorder;
+  const isCustomBorder = cardBorder?.mode === 'custom' && Boolean(cardBorder?.color);
+  const borderColor = cardBorder?.color || '#35D5BF';
 
   const handleRemove = (e: React.MouseEvent, animeId: number) => {
     e.preventDefault();
@@ -23,10 +29,16 @@ export default function ContinueWatching() {
     <div className="w-full px-4 sm:px-6 lg:px-8 py-12">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-bold text-[#EDF1F5] flex items-center gap-3">
-          <span className="w-1.5 h-8 bg-primary rounded-full inline-block"></span>
+          <span 
+            className="w-1.5 h-8 rounded-full inline-block"
+            style={{ backgroundColor: isCustomBorder ? borderColor : 'var(--theme-color, #8AD7D0)' }}
+          ></span>
           Continue Watching
         </h1>
-        <span className="bg-gray-800 text-gray-300 px-3 py-1 rounded-full text-sm font-bold border border-white/5">
+        <span 
+          className="bg-gray-800 text-gray-300 px-3 py-1 rounded-full text-sm font-bold border transition-colors"
+          style={isCustomBorder ? { borderColor: `${borderColor}50` } : { borderColor: 'rgba(255,255,255,0.05)' }}
+        >
           {progress.length} Anime
         </span>
       </div>

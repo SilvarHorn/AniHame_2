@@ -1,9 +1,34 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
+export type WatchServerType = 'mal' | 'anime' | 'animepahe' | 'tryembed' | 'kozo' | 'vidsrc';
+
+export interface CardBorderPreferences {
+  mode: 'default' | 'custom';
+  color: string;
+  width: number;
+}
+
+export const DEFAULT_SERVER_ORDER: WatchServerType[] = [
+  'mal',
+  'anime',
+  'animepahe',
+  'tryembed',
+  'kozo',
+  'vidsrc'
+];
+
+export const DEFAULT_CARD_BORDER: CardBorderPreferences = {
+  mode: 'default',
+  color: '#35D5BF',
+  width: 2
+};
+
 export interface UserPreferences {
   defaultServer: 'mal' | 'megaplayz' | 'vidsrc' | 'zhentube' | 'anime' | 'animepahe' | 'tryembed' | 'kozo';
   defaultAudio: 'sub' | 'dub';
   showEpisodeDate?: boolean;
+  serverOrder?: WatchServerType[];
+  cardBorder?: CardBorderPreferences;
 }
 
 export interface UserProfile {
@@ -30,6 +55,8 @@ interface AuthContextType {
 const defaultPreferences: UserPreferences = {
   defaultServer: 'mal',
   defaultAudio: 'sub',
+  serverOrder: DEFAULT_SERVER_ORDER,
+  cardBorder: DEFAULT_CARD_BORDER,
 };
 
 const defaultProfile: UserProfile = {
@@ -80,7 +107,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           themeColor: profile.themeColor || '#8AD7D0',
           bgGradient: profile.bgGradient || '',
           bgImage: profile.bgImage || '',
-          bgOpacity: profile.bgOpacity ?? 100
+          bgOpacity: profile.bgOpacity ?? 100,
+          serverOrder: profile.preferences?.serverOrder || DEFAULT_SERVER_ORDER,
+          cardBorder: profile.preferences?.cardBorder || DEFAULT_CARD_BORDER
         };
         localStorage.setItem('anime_profile', JSON.stringify(navData));
         window.dispatchEvent(new Event('profile-updated'));
