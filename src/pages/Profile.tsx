@@ -773,12 +773,12 @@ export default function Profile() {
               <label className="block text-sm font-medium text-gray-400 mb-3">Default Video Server</label>
               <SingleSelect
                 options={[
-                  { label: 'Megaplayz', value: 'mal' },
-                  { label: 'anime', value: 'anime' },
-                  { label: 'animepahe', value: 'animepahe' },
+                  { label: 'Megaplay', value: 'mal' },
+                  { label: 'Anime', value: 'anime' },
+                  { label: 'AnimePahe', value: 'animepahe' },
                   { label: 'Try', value: 'tryembed' },
                   { label: 'Kozo', value: 'kozo' },
-                  { label: 'vidsrc', value: 'vidsrc' }
+                  { label: 'VidSrc', value: 'vidsrc' }
                 ]}
                 value={defaultServer}
                 onChange={(val) => { setDefaultServer(val as 'mal' | 'megaplayz' | 'anime' | 'animepahe' | 'tryembed' | 'kozo' | 'vidsrc'); if(!isEditing) setIsEditing(true); }}

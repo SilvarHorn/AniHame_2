@@ -1,58 +1,37 @@
 import React from 'react';
 import { WatchServerType, DEFAULT_SERVER_ORDER } from '../../contexts/AuthContext';
-import { ChevronUp, ChevronDown, RotateCcw, Server, ShieldCheck, ShieldAlert, GripVertical } from 'lucide-react';
+import { ChevronUp, ChevronDown, RotateCcw, GripVertical } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 interface ServerMeta {
   id: WatchServerType;
   name: string;
-  source: string;
-  badge: string;
-  isSandboxed: boolean;
 }
 
 export const SERVER_METAS: Record<WatchServerType, ServerMeta> = {
   mal: {
     id: 'mal',
-    name: 'Megaplayz',
-    source: 'megaplay.buzz',
-    badge: 'MAL ID',
-    isSandboxed: false
+    name: 'Megaplay'
   },
   anime: {
     id: 'anime',
-    name: 'anime',
-    source: 'vidnest.fun',
-    badge: 'AniList',
-    isSandboxed: false
+    name: 'Anime'
   },
   animepahe: {
     id: 'animepahe',
-    name: 'animepahe',
-    source: 'vidnest.fun',
-    badge: 'AniList',
-    isSandboxed: false
+    name: 'AnimePahe'
   },
   tryembed: {
     id: 'tryembed',
-    name: 'Try',
-    source: 'tryembed.us.cc',
-    badge: 'AniList',
-    isSandboxed: true
+    name: 'Try'
   },
   kozo: {
     id: 'kozo',
-    name: 'Kozo',
-    source: 'zokoanime.video',
-    badge: 'MAL ID',
-    isSandboxed: true
+    name: 'Kozo'
   },
   vidsrc: {
     id: 'vidsrc',
-    name: 'vidsrc',
-    source: 'vidsrc2.ru',
-    badge: 'IMDb',
-    isSandboxed: true
+    name: 'VidSrc'
   }
 };
 
@@ -173,10 +152,7 @@ export const ServerOrderManager: React.FC<ServerOrderManagerProps> = ({
         {sanitizedOrder.map((srvKey, idx) => {
           const meta = SERVER_METAS[srvKey] || {
             id: srvKey,
-            name: srvKey,
-            source: '',
-            badge: 'Server',
-            isSandboxed: true
+            name: srvKey
           };
 
           const isBeingDragged = draggedIndex === idx;
@@ -192,13 +168,13 @@ export const ServerOrderManager: React.FC<ServerOrderManagerProps> = ({
               onDrop={(e) => handleDrop(e, idx)}
               onDragEnd={handleDragEnd}
               className={cn(
-                "group flex items-center justify-between px-3 py-2 rounded-lg border border-white/5 bg-[#12141A] transition-all cursor-grab active:cursor-grabbing select-none",
+                "group flex items-center justify-between px-3 py-2.5 rounded-lg border border-white/5 bg-[#12141A] transition-all cursor-grab active:cursor-grabbing select-none",
                 idx === 0 && !isTargeted && !isBeingDragged && "border-primary/30 bg-primary/5",
                 isBeingDragged && "opacity-35 scale-[0.98] border-dashed border-primary/50 shadow-inner",
                 isTargeted && "border-primary bg-primary/15 ring-2 ring-primary/40 -translate-y-0.5 shadow-lg shadow-primary/10"
               )}
             >
-              <div className="flex items-center gap-2.5 min-w-0">
+              <div className="flex items-center gap-3 min-w-0">
                 {/* Drag Handle */}
                 <div 
                   className="text-gray-500 group-hover:text-primary transition-colors cursor-grab active:cursor-grabbing shrink-0"
@@ -214,26 +190,10 @@ export const ServerOrderManager: React.FC<ServerOrderManagerProps> = ({
                   {idx + 1}
                 </span>
 
-                <div className="flex flex-col min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-bold text-[#EDF1F5] truncate">
-                      {meta.name}
-                    </span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 border border-white/5 font-semibold">
-                      {meta.badge}
-                    </span>
-                    {srvKey === 'mal' && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold flex items-center gap-1">
-                        <ShieldCheck size={10} />
-                        Unsandboxed (Secured)
-                      </span>
-                    )}
-                  </div>
-                  {!compact && (
-                    <span className="text-[11px] text-gray-500 truncate">
-                      {meta.source}
-                    </span>
-                  )}
+                <div className="flex items-center min-w-0">
+                  <span className="text-sm font-bold text-[#EDF1F5] truncate">
+                    {meta.name}
+                  </span>
                 </div>
               </div>
 

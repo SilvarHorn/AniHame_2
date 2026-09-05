@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { fetchAnilist, ANIME_DETAILS_QUERY, isHanimeMode } from '../api/anilist';
 import { AnimeMedia } from '../types';
 import { saveProgress } from '../store/progress';
-import { ChevronLeft, ChevronDown, ArrowDownUp, LayoutGrid, List as ListIcon, PlayCircle, ExternalLink, SlidersHorizontal } from 'lucide-react';
+import { ChevronLeft, ChevronDown, ArrowDownUp, LayoutGrid, List as ListIcon, PlayCircle, ExternalLink, SlidersHorizontal, Server } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth, WatchServerType, DEFAULT_SERVER_ORDER } from '../contexts/AuthContext';
 import { MarqueeText } from '../components/MarqueeText';
@@ -117,19 +117,38 @@ export default function Watch() {
     await updatePreferences({ serverOrder: newOrder });
   };
 
-  // Anti-hijack protection for unsandboxed Megaplayz
+  // Anti-hijack protection specifically for the Megaplay server
   useEffect(() => {
-    if (serverType === 'mal') {
-      const handleBeforeUnload = () => {
-        // Guard against top-window navigation from unsandboxed iframe
-      };
-      window.addEventListener('beforeunload', handleBeforeUnload);
-      return () => {
-        window.removeEventListener('beforeunload', handleBeforeUnload);
-      };
-    }
-  }, [serverType]);
+    if (serverType !== 'mal') return;
 
+    let userIntentionalNavigation = false;
+
+    const handleInternalClick = (e: MouseEvent) => {
+      const target = (e.target as HTMLElement)?.closest('a, button, [role="button"]');
+      if (target) {
+        userIntentionalNavigation = true;
+        setTimeout(() => {
+          userIntentionalNavigation = false;
+        }, 2000);
+      }
+    };
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!userIntentionalNavigation) {
+        // Intercept unauthorized top-window redirect from third-party embed
+        e.preventDefault();
+        return (e.returnValue = 'Leave AniHame?');
+      }
+    };
+
+    document.addEventListener('click', handleInternalClick, true);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      document.removeEventListener('click', handleInternalClick, true);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [serverType]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -184,6 +203,12 @@ export default function Watch() {
               if (mapping && mapping.imdb_id && mapping.imdb_id.length > 0) {
                 iId = Array.isArray(mapping.imdb_id) ? mapping.imdb_id[0] : mapping.imdb_id;
                 setImdbId(iId);
+              }
+              if (mapping && mapping.mal_id && !data.Media.idMal) {
+                const malNum = Number(mapping.mal_id);
+                if (!isNaN(malNum) && malNum > 0) {
+                  setAnime(prev => prev ? { ...prev, idMal: malNum } : prev);
+                }
               }
               
               if (data.Media.idMal) {
@@ -384,15 +409,14 @@ export default function Watch() {
   } else if (serverType === 'zhentube') {
     iframeUrl = zhenTubeUrl || '';
   } else {
-    // Default to Megaplayz (MAL)
-    const rawMalId = anime?.idMal || animeId;
-    const malId = encodeURIComponent(String(rawMalId).trim().replace(/[^a-zA-Z0-9_-]/g, ''));
-    iframeUrl = `https://megaplay.buzz/stream/mal/${malId}/${safeEpisode}/${safeAudio}`;
+    // Megaplay strictly uses only the MyAnimeList ID, NEVER the AniList ID
+    if (anime?.idMal) {
+      const malId = encodeURIComponent(String(anime.idMal).trim().replace(/[^a-zA-Z0-9_-]/g, ''));
+      iframeUrl = `https://megaplay.buzz/stream/mal/${malId}/${safeEpisode}/${safeAudio}`;
+    } else {
+      iframeUrl = '';
+    }
   }
-
-  // Apply sandbox attribute to Kozo, VidSrc, and TryEmbed.
-  // The sandbox attribute is removed from Megaplayz ('mal') per request, while secured via strict referrerPolicy, permission delegation controls, and parameter sanitization.
-  const isSandboxedServer = serverType === 'kozo' || serverType === 'vidsrc' || serverType === 'tryembed';
 
   const handleIframeError = () => {
     const currentIndex = serverOrder.indexOf(serverType as WatchServerType);
@@ -400,7 +424,7 @@ export default function Watch() {
       const nextServer = serverOrder[currentIndex + 1];
       handleSelectServer(nextServer);
     } else {
-      const fallback = serverOrder.find(s => s !== serverType) || 'mal';
+      const fallback = serverOrder.find(s => s !== serverType && (s !== 'mal' || !!anime?.idMal)) || 'anime';
       handleSelectServer(fallback);
     }
   };
@@ -484,7 +508,7 @@ export default function Watch() {
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 transition-colors shrink-0"
-            title="Open in a new browser tab to remove preview sandbox"
+            title="Open player in a new browser tab"
           >
             <ExternalLink size={14} />
             <span>Open in New Tab</span>
@@ -495,42 +519,76 @@ export default function Watch() {
       <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 mb-12">
         {/* Left Side: Video Player */}
         <div className="flex-1 flex flex-col gap-4 min-w-0">
-          {isInIframe && (serverType === 'anime' || serverType === 'animepahe') && (
-            <div className="bg-amber-950/40 border border-amber-500/30 text-amber-200 px-4 py-2.5 rounded-xl text-xs sm:text-sm flex items-center justify-between gap-3 flex-wrap">
-              <span>
-                <strong>Sandbox Detected:</strong> AI Studio's preview window enforces an outer iframe sandbox. Open in a new tab to play without sandbox restrictions.
-              </span>
-              <a
-                href={window.location.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-md text-xs transition-colors shrink-0 inline-flex items-center gap-1"
-              >
-                <ExternalLink size={13} />
-                Open in New Tab
-              </a>
-            </div>
-          )}
-
           <div className="w-full bg-black rounded-xl overflow-hidden shadow-2xl shadow-black/50 border border-white/5 flex flex-col aspect-video shrink-0">
             <div className="w-full h-full relative">
               {iframeUrl ? (
-              <iframe 
-                key={`${serverType}-${currentEp}-${audioType}`}
-                src={iframeUrl}
-                frameBorder="0"
-                scrolling="no"
-                allowFullScreen
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                referrerPolicy="no-referrer"
-                sandbox={isSandboxedServer ? "allow-scripts allow-same-origin allow-forms allow-presentation" : undefined}
-                className="absolute inset-0 w-full h-full border-none"
-                title={`Watch ${anime.title.romaji} Episode ${currentEp}`}
-                onError={handleIframeError}
-              ></iframe>
+                serverType === 'mal' ? (
+                  <iframe 
+                    key={`mal-${currentEp}-${audioType}`}
+                    src={iframeUrl}
+                    width="100%"
+                    height="100%"
+                    frameBorder="0"
+                    scrolling="no"
+                    allowFullScreen
+                    allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+                    referrerPolicy="strict-origin-when-cross-origin"
+                    className="absolute inset-0 w-full h-full border-none"
+                    title={`Watch ${anime.title.romaji} Episode ${currentEp}`}
+                    onError={handleIframeError}
+                  ></iframe>
+                ) : (
+                  <iframe 
+                    key={`${serverType}-${currentEp}-${audioType}`}
+                    src={iframeUrl}
+                    width="100%"
+                    height="100%"
+                    frameBorder="0"
+                    scrolling="no"
+                    allowFullScreen
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    referrerPolicy="no-referrer"
+                    className="absolute inset-0 w-full h-full border-none"
+                    title={`Watch ${anime.title.romaji} Episode ${currentEp}`}
+                    onError={handleIframeError}
+                  ></iframe>
+                )
               ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-gray-500">
-                  No video source selected
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-[#0B0C0F]">
+                  <div className="w-12 h-12 rounded-full bg-amber-500/10 text-amber-400 flex items-center justify-center mb-3">
+                    <Server size={22} />
+                  </div>
+                  <h3 className="text-base font-bold text-white mb-1">
+                    {serverType === 'mal' && !anime?.idMal
+                      ? 'MyAnimeList ID Not Available'
+                      : 'No Video Stream Available'}
+                  </h3>
+                  <p className="text-gray-400 text-xs sm:text-sm max-w-md mb-4">
+                    {serverType === 'mal' && !anime?.idMal
+                      ? 'Megaplay only uses the MyAnimeList ID. Please switch to another server below to watch this episode.'
+                      : 'Please select an alternate server below to begin playback.'}
+                  </p>
+                  <div className="flex flex-wrap gap-2 justify-center">
+                    {serverOrder.filter(s => s !== 'mal' && (s !== 'vidsrc' || imdbId)).slice(0, 3).map(srv => {
+                      const names: Record<string, string> = {
+                        anime: 'Anime',
+                        animepahe: 'AnimePahe',
+                        tryembed: 'Try',
+                        kozo: 'Kozo',
+                        vidsrc: 'VidSrc'
+                      };
+                      return (
+                        <button
+                          key={srv}
+                          type="button"
+                          onClick={() => handleSelectServer(srv)}
+                          className="px-3.5 py-1.5 bg-primary/20 hover:bg-primary text-primary hover:text-black rounded-lg text-xs font-bold transition-all"
+                        >
+                          Switch to {names[srv] || srv}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>
@@ -591,15 +649,16 @@ export default function Watch() {
                       return (
                         <button
                           key="mal"
+                          type="button"
                           onClick={() => handleSelectServer('mal')}
-                          disabled={!anime?.idMal && !animeId}
+                          disabled={!anime?.idMal}
                           className={cn(
-                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
                             serverType === 'mal' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
                           )}
-                          title={!anime?.idMal ? "MAL ID not available for this anime" : undefined}
+                          title={!anime?.idMal ? "MyAnimeList ID not available for this anime on Megaplay" : undefined}
                         >
-                          Megaplayz
+                          Megaplay
                         </button>
                       );
                     }
@@ -614,7 +673,7 @@ export default function Watch() {
                             serverType === 'anime' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
                           )}
                         >
-                          anime
+                          Anime
                         </button>
                       );
                     }
@@ -629,7 +688,7 @@ export default function Watch() {
                             serverType === 'animepahe' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
                           )}
                         >
-                          animepahe
+                          AnimePahe
                         </button>
                       );
                     }
@@ -676,7 +735,7 @@ export default function Watch() {
                           )}
                           title={!imdbId ? "IMDb ID not available for this anime" : undefined}
                         >
-                          vidsrc
+                          VidSrc
                         </button>
                       );
                     }
