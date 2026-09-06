@@ -389,34 +389,66 @@ export default function Watch() {
   const safeEpisode = Math.max(1, Math.floor(Number(currentEp)) || 1);
   const safeAudio = audioType === 'dub' ? 'dub' : 'sub';
 
+  const appendPlaybackParams = (url: string) => {
+    if (!url) return '';
+    const delimiter = url.includes('?') ? '&' : '?';
+    return `${url}${delimiter}mute=0&auto_skip=0&autoskip=0`;
+  };
+
   if (serverType === 'vidsrc' && imdbId) {
     const safeImdb = encodeURIComponent(String(imdbId).trim().replace(/[^a-zA-Z0-9_-]/g, ''));
     if (anime?.format === 'MOVIE') {
-      iframeUrl = `https://vidsrc2.ru/embed/movie/${safeImdb}`;
+      iframeUrl = appendPlaybackParams(`https://vidsrc2.ru/embed/movie/${safeImdb}`);
     } else {
-      iframeUrl = `https://vidsrc2.ru/embed/tv/${safeImdb}/1/${safeEpisode}`;
+      iframeUrl = appendPlaybackParams(`https://vidsrc2.ru/embed/tv/${safeImdb}/1/${safeEpisode}`);
     }
   } else if (serverType === 'kozo') {
     const rawMalId = anime?.idMal || animeId;
     const malId = encodeURIComponent(String(rawMalId).trim().replace(/[^a-zA-Z0-9_-]/g, ''));
-    iframeUrl = `https://zokoanime.video/stream/mal/${malId}/${safeEpisode}/${safeAudio}?color=35d5bf`;
+    iframeUrl = appendPlaybackParams(`https://zokoanime.video/stream/mal/${malId}/${safeEpisode}/${safeAudio}?color=35d5bf`);
   } else if (serverType === 'anime') {
-    iframeUrl = `https://vidnest.fun/anime/${anilistIdForStream}/${safeEpisode}/${safeAudio}`;
+    iframeUrl = appendPlaybackParams(`https://vidnest.fun/anime/${anilistIdForStream}/${safeEpisode}/${safeAudio}`);
   } else if (serverType === 'animepahe') {
-    iframeUrl = `https://vidnest.fun/animepahe/${anilistIdForStream}/${safeEpisode}/${safeAudio}`;
+    iframeUrl = appendPlaybackParams(`https://vidnest.fun/animepahe/${anilistIdForStream}/${safeEpisode}/${safeAudio}`);
   } else if (serverType === 'tryembed') {
-    iframeUrl = `https://tryembed.us.cc/embed/anime/${anilistIdForStream}/${safeEpisode}/${safeAudio}`;
+    iframeUrl = appendPlaybackParams(`https://tryembed.us.cc/embed/anime/${anilistIdForStream}/${safeEpisode}/${safeAudio}`);
   } else if (serverType === 'zhentube') {
-    iframeUrl = zhenTubeUrl || '';
+    iframeUrl = appendPlaybackParams(zhenTubeUrl || '');
   } else {
     // Megaplay strictly uses only the MyAnimeList ID, NEVER the AniList ID
     if (anime?.idMal) {
       const malId = encodeURIComponent(String(anime.idMal).trim().replace(/[^a-zA-Z0-9_-]/g, ''));
-      iframeUrl = `https://megaplay.buzz/stream/mal/${malId}/${safeEpisode}/${safeAudio}`;
+      iframeUrl = appendPlaybackParams(`https://megaplay.buzz/stream/mal/${malId}/${safeEpisode}/${safeAudio}`);
     } else {
       iframeUrl = '';
     }
   }
+
+  const handleIframeLoad = (e: React.SyntheticEvent<HTMLIFrameElement>) => {
+    try {
+      const iframe = e.currentTarget;
+      if (iframe && iframe.contentWindow) {
+        // Broadcast mute=0 and auto_skip=0 commands for embed players listening to postMessage API
+        const msgs = [
+          { event: 'command', func: 'unMute' },
+          { event: 'command', func: 'setVolume', args: [100] },
+          { type: 'unmute' },
+          { action: 'unmute' },
+          { event: 'auto_skip', value: false },
+          { type: 'auto_skip', value: false },
+          { action: 'disable_auto_skip' },
+          { event: 'skip_intro', value: false },
+          { type: 'skip_intro', value: false }
+        ];
+        msgs.forEach(msg => {
+          iframe.contentWindow?.postMessage(msg, '*');
+          iframe.contentWindow?.postMessage(JSON.stringify(msg), '*');
+        });
+      }
+    } catch {
+      // Ignored for cross-origin security
+    }
+  };
 
   const handleIframeError = () => {
     const currentIndex = serverOrder.indexOf(serverType as WatchServerType);
@@ -536,6 +568,7 @@ export default function Watch() {
                     className="absolute inset-0 w-full h-full border-none"
                     title={`Watch ${anime.title.romaji} Episode ${currentEp}`}
                     onError={handleIframeError}
+                    onLoad={handleIframeLoad}
                   ></iframe>
                 ) : (
                   <iframe 
@@ -551,6 +584,7 @@ export default function Watch() {
                     className="absolute inset-0 w-full h-full border-none"
                     title={`Watch ${anime.title.romaji} Episode ${currentEp}`}
                     onError={handleIframeError}
+                    onLoad={handleIframeLoad}
                   ></iframe>
                 )
               ) : (
