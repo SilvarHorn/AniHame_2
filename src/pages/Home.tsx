@@ -7,6 +7,7 @@ import Timetable from '../components/home/Timetable';
 import { fetchAnilist, TRENDING_ANIME_QUERY } from '../api/anilist';
 import { fetchLatestUpdated } from '../api/animeschedule';
 import { AnimeMedia } from '../types';
+import { preloadAnimeThumbnails } from '../utils/imagePreload';
 import { motion } from 'motion/react';
 
 
@@ -50,6 +51,7 @@ export default function Home() {
 
   // Fetch Trending
   useEffect(() => {
+    let isMounted = true;
     const fetchTrending = async () => {
       setError('');
       try {
@@ -58,15 +60,22 @@ export default function Home() {
           perPage: 20,
           countryOfOrigin: trendingCountry || undefined
         });
-        setTrending(data?.Page?.media || []);
+        if (!isMounted) return;
+        const results = data?.Page?.media || [];
+        // Preload thumbnails so all carousel cards display together
+        await preloadAnimeThumbnails(results);
+        if (!isMounted) return;
+        setTrending(results);
       } catch (error) {
+        if (!isMounted) return;
         console.error('Error fetching trending:', error);
         setError('Failed to fetch trending anime.');
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
     fetchTrending();
+    return () => { isMounted = false; };
   }, [trendingCountry]);
 
   // Fetch Latest
@@ -79,7 +88,11 @@ export default function Home() {
       try {
         const data = await fetchLatestUpdated(latestPage, 24);
         if (isMounted) {
-          setLatest(data.media || []);
+          const media = data.media || [];
+          // Preload thumbnails so the entire batch reveals together
+          await preloadAnimeThumbnails(media);
+          if (!isMounted) return;
+          setLatest(media);
           setLatestHasNext(data.pageInfo?.hasNextPage || false);
         }
       } catch (err) {

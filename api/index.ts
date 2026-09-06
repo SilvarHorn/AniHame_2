@@ -378,6 +378,7 @@ function mapScheduleItemToAniListMedia(item: any): any {
 async function synthesizeAnilistFallback(body: any): Promise<any> {
   const queryStr = typeof body?.query === 'string' ? body.query : '';
   const variables = body?.variables || {};
+  const isAdult = queryStr.includes('isAdult: true') || Boolean(variables.isAdult);
 
   // 1. Details Query (Media(id: $id))
   if (queryStr.includes('Media(id:') || (queryStr.includes('query($id: Int)') && queryStr.includes('Media('))) {
@@ -525,47 +526,258 @@ async function synthesizeAnilistFallback(body: any): Promise<any> {
     };
   }
 
-  // 3. Search & Explore Query with Filters
-  const isSearchOrFilter = variables.search || variables.genre_in || variables.seasonYear || variables.format_in || queryStr.includes('SEARCH_ANIME_QUERY') || queryStr.includes('search:');
-
-  if (isSearchOrFilter && (variables.search || variables.genre_in || variables.seasonYear)) {
+  // 3. Adult (Hanime Mode) Query Handling
+  if (isAdult) {
     const page = Math.max(1, Number(variables.page) || 1);
-    const limit = Math.min(Number(variables.perPage) || 20, 20);
-    const offset = (page - 1) * limit;
+    const limit = Math.min(Math.max(1, Number(variables.perPage) || 20), 24);
+    const scheduleItems = await getAniScheduleFeed();
+    const adultSchedule = scheduleItems.filter(item => item && item.isAdult);
 
-    let kitsuQuery = `https://kitsu.io/api/edge/anime?page[limit]=${limit}&page[offset]=${offset}`;
-    if (variables.search) {
-      kitsuQuery += `&filter[text]=${encodeURIComponent(variables.search)}`;
-    }
-    if (Array.isArray(variables.genre_in) && variables.genre_in.length > 0) {
-      kitsuQuery += `&filter[categories]=${encodeURIComponent(variables.genre_in[0].toLowerCase())}`;
-    }
-    if (variables.seasonYear) {
-      kitsuQuery += `&filter[seasonYear]=${variables.seasonYear}`;
-    }
+    // If text search is requested in adult mode
+    if (variables.search && String(variables.search).trim()) {
+      const q = String(variables.search).toLowerCase().trim();
+      const matched = adultSchedule.filter(item => {
+        const romaji = (item.title?.romaji || '').toLowerCase();
+        const english = (item.title?.english || '').toLowerCase();
+        const native = (item.title?.native || '').toLowerCase();
+        return romaji.includes(q) || english.includes(q) || native.includes(q);
+      });
 
-    try {
-      const res = await axios.get(kitsuQuery, { timeout: 3500 });
-      if (res.status === 200 && Array.isArray(res.data?.data)) {
-        const media = res.data.data.map(mapKitsuToAniListMedia).filter(Boolean);
+      if (matched.length > 0) {
+        const start = (page - 1) * limit;
+        const paged = matched.slice(start, start + limit);
         return {
           data: {
             Page: {
               pageInfo: {
-                hasNextPage: res.data.data.length === limit,
+                hasNextPage: start + limit < matched.length,
                 currentPage: page
               },
-              media
+              media: paged.map(mapScheduleItemToAniListMedia).filter(Boolean)
             }
           }
         };
       }
-    } catch {}
+
+      // Try ZhenTube search for adult content
+      try {
+        const zhenUrl = `https://zhentube.com/page/${page}/?s=${encodeURIComponent(q)}`;
+        const zhenRes = await axios.get(zhenUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+          timeout: 4000
+        });
+        const $ = cheerio.load(zhenRes.data);
+        const zhenMedia: any[] = [];
+        $('article').each((idx, el) => {
+          const title = $(el).find('h2, .entry-title').first().text().trim() || $(el).find('a').first().text().trim();
+          const link = $(el).find('a').first().attr('href') || '';
+          const img = $(el).find('img.video-main-thumb, img').attr('src') || $(el).find('img').attr('data-src') || '';
+          if (title) {
+            zhenMedia.push({
+              id: 990000 + idx + (page - 1) * 20,
+              idMal: null,
+              type: 'ANIME',
+              format: 'OVA',
+              title: { romaji: title, english: title, native: '' },
+              coverImage: { extraLarge: img, large: img, medium: img },
+              bannerImage: img,
+              averageScore: 78,
+              isAdult: true,
+              description: '',
+              episodes: 1,
+              status: 'FINISHED',
+              genres: ['Hentai'],
+              tags: []
+            });
+          }
+        });
+
+        if (zhenMedia.length > 0) {
+          return {
+            data: {
+              Page: {
+                pageInfo: { hasNextPage: zhenMedia.length >= 10, currentPage: page },
+                media: zhenMedia.slice(0, limit)
+              }
+            }
+          };
+        }
+      } catch {}
+    }
+
+    // Default Adult Browsing
+    const start = (page - 1) * limit;
+    const pagedSchedule = adultSchedule.slice(start, start + limit);
+    if (pagedSchedule.length > 0) {
+      return {
+        data: {
+          Page: {
+            pageInfo: {
+              hasNextPage: start + limit < adultSchedule.length,
+              currentPage: page
+            },
+            media: pagedSchedule.map(mapScheduleItemToAniListMedia).filter(Boolean)
+          }
+        }
+      };
+    }
   }
 
-  // 4. Trending & Popular Anime List
+  // 4. Search & Explore with Full Filters (Genre, Format, Status, Year, Season, Sort, Pagination)
+  const isSearchOrFilter =
+    Boolean(variables.search) ||
+    Boolean(variables.genre_in && variables.genre_in.length > 0) ||
+    Boolean(variables.format_in && variables.format_in.length > 0) ||
+    Boolean(variables.status_in && variables.status_in.length > 0) ||
+    Boolean(variables.seasonYear) ||
+    Boolean(variables.season) ||
+    queryStr.includes('SEARCH_ANIME_QUERY') ||
+    queryStr.includes('search:');
+
   const page = Math.max(1, Number(variables.page) || 1);
-  const limit = Math.min(Number(variables.perPage) || 20, 24);
+  const limit = Math.min(Math.max(1, Number(variables.perPage) || 20), 24);
+  const offset = (page - 1) * limit;
+
+  if (isSearchOrFilter) {
+    try {
+      let kitsuUrl = 'https://kitsu.io/api/edge/anime?';
+      const params: string[] = [];
+
+      // Text search
+      if (variables.search && String(variables.search).trim()) {
+        params.push(`filter[text]=${encodeURIComponent(String(variables.search).trim())}`);
+      }
+
+      // Genre filter mapping
+      const genreMap: Record<string, string> = {
+        'mahou shoujo': 'magical-girl',
+        'sci-fi': 'science-fiction',
+        'slice of life': 'slice-of-life',
+        'action': 'action',
+        'adventure': 'adventure',
+        'comedy': 'comedy',
+        'drama': 'drama',
+        'ecchi': 'ecchi',
+        'fantasy': 'fantasy',
+        'horror': 'horror',
+        'mecha': 'mecha',
+        'music': 'music',
+        'mystery': 'mystery',
+        'psychological': 'psychological',
+        'romance': 'romance',
+        'sports': 'sports',
+        'supernatural': 'supernatural',
+        'thriller': 'thriller'
+      };
+
+      if (Array.isArray(variables.genre_in) && variables.genre_in.length > 0) {
+        const mappedGenres = variables.genre_in.map((g: string) => {
+          const key = String(g).toLowerCase().trim();
+          return genreMap[key] || key.replace(/\s+/g, '-');
+        });
+        params.push(`filter[categories]=${encodeURIComponent(mappedGenres.join(','))}`);
+      }
+
+      // Format filter mapping
+      const formatMap: Record<string, string> = {
+        'tv': 'tv',
+        'tv_short': 'tv',
+        'movie': 'movie',
+        'special': 'special',
+        'ova': 'ova',
+        'ona': 'ona',
+        'music': 'music'
+      };
+
+      if (Array.isArray(variables.format_in) && variables.format_in.length > 0) {
+        const mappedFormats = variables.format_in.map((f: string) => {
+          const key = String(f).toLowerCase().trim();
+          return formatMap[key] || key;
+        });
+        params.push(`filter[subtype]=${encodeURIComponent(mappedFormats.join(','))}`);
+      }
+
+      // Status filter mapping
+      const statusMap: Record<string, string> = {
+        'releasing': 'current',
+        'finished': 'finished',
+        'not_yet_released': 'upcoming',
+        'cancelled': 'unreleased'
+      };
+
+      if (Array.isArray(variables.status_in) && variables.status_in.length > 0) {
+        const mappedStatuses = variables.status_in.map((s: string) => {
+          const key = String(s).toLowerCase().trim();
+          return statusMap[key] || key;
+        });
+        params.push(`filter[status]=${encodeURIComponent(mappedStatuses.join(','))}`);
+      }
+
+      // Year filter
+      if (variables.seasonYear) {
+        params.push(`filter[seasonYear]=${encodeURIComponent(String(variables.seasonYear))}`);
+      }
+
+      // Season filter
+      if (variables.season) {
+        params.push(`filter[season]=${encodeURIComponent(String(variables.season).toLowerCase().trim())}`);
+      }
+
+      // Sort mapping
+      const rawSort = Array.isArray(variables.sort) ? variables.sort[0] : (variables.sort || 'POPULARITY_DESC');
+      let sortParam = '-userCount';
+      if (rawSort === 'SCORE_DESC') sortParam = '-averageRating';
+      else if (rawSort === 'START_DATE_DESC') sortParam = '-startDate';
+      else if (rawSort === 'UPDATED_AT_DESC') sortParam = '-updatedAt';
+      else if (rawSort === 'TRENDING_DESC') sortParam = '-favoritesCount';
+
+      if (!variables.search || rawSort !== 'POPULARITY_DESC') {
+        params.push(`sort=${sortParam}`);
+      }
+
+      kitsuUrl += params.join('&');
+
+      let allData: any[] = [];
+      let hasNextPage = false;
+
+      if (limit > 20) {
+        // Fetch 2 concurrent pages to satisfy limit (e.g. 24 items)
+        const [r1, r2] = await Promise.allSettled([
+          axios.get(`${kitsuUrl}&page[limit]=20&page[offset]=${offset}`, { timeout: 4000 }),
+          axios.get(`${kitsuUrl}&page[limit]=20&page[offset]=${offset + 20}`, { timeout: 4000 })
+        ]);
+
+        const d1 = r1.status === 'fulfilled' && Array.isArray(r1.value.data?.data) ? r1.value.data.data : [];
+        const d2 = r2.status === 'fulfilled' && Array.isArray(r2.value.data?.data) ? r2.value.data.data : [];
+        const combined = [...d1, ...d2];
+        allData = combined.slice(0, limit);
+        hasNextPage = combined.length > limit || (r2.status === 'fulfilled' && d2.length > 4);
+      } else {
+        const res = await axios.get(`${kitsuUrl}&page[limit]=${limit}&page[offset]=${offset}`, { timeout: 4000 });
+        if (res.status === 200 && Array.isArray(res.data?.data)) {
+          allData = res.data.data;
+          hasNextPage = allData.length === limit;
+        }
+      }
+
+      const media = allData.map(mapKitsuToAniListMedia).filter(Boolean);
+      return {
+        data: {
+          Page: {
+            pageInfo: {
+              hasNextPage,
+              currentPage: page
+            },
+            media
+          }
+        }
+      };
+    } catch (e: any) {
+      console.error('Kitsu Explore search error:', e?.message || e);
+    }
+  }
+
+  // 5. Trending & Popular Anime List
   const isAiring = queryStr.includes('TRENDING_DESC') || queryStr.includes('UPDATED_AT_DESC') || queryStr.includes('RELEASING');
 
   if (isAiring) {
@@ -599,26 +811,42 @@ async function synthesizeAnilistFallback(body: any): Promise<any> {
 
   // Fallback to Kitsu popular list (Attack on Titan, Death Note, One Piece, etc.)
   try {
-    const offset = (page - 1) * 20;
     const sortParam = isAiring ? '-averageRating' : '-userCount';
-    const kitsuRes = await axios.get(`https://kitsu.io/api/edge/anime?sort=${sortParam}&page[limit]=20&page[offset]=${offset}`, {
-      timeout: 3500
-    });
+    let allData: any[] = [];
+    let hasNextPage = false;
 
-    if (kitsuRes.status === 200 && Array.isArray(kitsuRes.data?.data)) {
-      const media = kitsuRes.data.data.map(mapKitsuToAniListMedia).filter(Boolean);
-      return {
-        data: {
-          Page: {
-            pageInfo: {
-              hasNextPage: kitsuRes.data.data.length === 20,
-              currentPage: page
-            },
-            media
-          }
-        }
-      };
+    if (limit > 20) {
+      const [r1, r2] = await Promise.allSettled([
+        axios.get(`https://kitsu.io/api/edge/anime?sort=${sortParam}&page[limit]=20&page[offset]=${offset}`, { timeout: 4000 }),
+        axios.get(`https://kitsu.io/api/edge/anime?sort=${sortParam}&page[limit]=20&page[offset]=${offset + 20}`, { timeout: 4000 })
+      ]);
+      const d1 = r1.status === 'fulfilled' && Array.isArray(r1.value.data?.data) ? r1.value.data.data : [];
+      const d2 = r2.status === 'fulfilled' && Array.isArray(r2.value.data?.data) ? r2.value.data.data : [];
+      const combined = [...d1, ...d2];
+      allData = combined.slice(0, limit);
+      hasNextPage = combined.length > limit || (r2.status === 'fulfilled' && d2.length > 4);
+    } else {
+      const kitsuRes = await axios.get(`https://kitsu.io/api/edge/anime?sort=${sortParam}&page[limit]=${limit}&page[offset]=${offset}`, {
+        timeout: 4000
+      });
+      if (kitsuRes.status === 200 && Array.isArray(kitsuRes.data?.data)) {
+        allData = kitsuRes.data.data;
+        hasNextPage = allData.length === limit;
+      }
     }
+
+    const media = allData.map(mapKitsuToAniListMedia).filter(Boolean);
+    return {
+      data: {
+        Page: {
+          pageInfo: {
+            hasNextPage,
+            currentPage: page
+          },
+          media
+        }
+      }
+    };
   } catch {}
 
   return {
@@ -677,8 +905,8 @@ app.post("/api/anilist", async (req, res) => {
           upstreamSuccess = true;
           upstreamData = json;
         } else if (isTemporarilyDisabled || response.status === 403) {
-          // Engage circuit breaker for 5 minutes to avoid delay on subsequent queries
-          anilistCircuitBreakerUntil = Date.now() + 1000 * 60 * 5;
+          // Engage circuit breaker for 15 minutes to avoid delay on subsequent queries
+          anilistCircuitBreakerUntil = Date.now() + 1000 * 60 * 15;
         }
       } catch {
         // Network timeout or error

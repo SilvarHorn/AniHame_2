@@ -7,6 +7,7 @@ export interface AnimeTitle {
 export interface AnimeCoverImage {
   extraLarge: string;
   large: string;
+  medium?: string;
 }
 
 export interface NextAiringEpisode {

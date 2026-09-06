@@ -5,10 +5,10 @@ import NHentaiGallery from './NHentaiGallery';
 import { MarqueeText } from '../components/MarqueeText';
 import { Search } from 'lucide-react';
 import AnimeCardSkeleton from '../components/ui/AnimeCardSkeleton';
+import { preloadAnimeThumbnails } from '../utils/imagePreload';
 
-function NHentaiCard({ gallery }: { gallery: any; key?: any }) {
+function NHentaiCard({ gallery, batchReady = true }: { gallery: any; key?: any; batchReady?: boolean }) {
   const [isHovered, setIsHovered] = React.useState(false);
-  const [imageLoaded, setImageLoaded] = React.useState(false);
   
   const title = gallery.english_title || gallery.japanese_title || gallery.title?.english || gallery.title?.japanese || 'Untitled';
   
@@ -16,6 +16,17 @@ function NHentaiCard({ gallery }: { gallery: any; key?: any }) {
   const initialThumb = gallery.thumbnail 
     ? (gallery.thumbnail.startsWith('http') ? gallery.thumbnail : `https://t3.nhentai.net/${gallery.thumbnail}`)
     : `https://t3.nhentai.net/galleries/${gallery.media_id}/thumb.jpg`;
+
+  const [imageLoaded, setImageLoaded] = React.useState(() => {
+    if (typeof window !== 'undefined' && initialThumb) {
+      const test = new Image();
+      test.src = initialThumb;
+      return Boolean(test.complete && test.naturalWidth > 0);
+    }
+    return false;
+  });
+
+  const isVisible = batchReady && imageLoaded;
   
   return (
     <Link 
@@ -25,7 +36,7 @@ function NHentaiCard({ gallery }: { gallery: any; key?: any }) {
       onMouseLeave={() => setIsHovered(false)}
     >
       <div className="aspect-[3/4] relative overflow-hidden bg-[#151F2E]">
-        {!imageLoaded && (
+        {!isVisible && (
           <div className="absolute inset-0 z-10 bg-[#1A2333] animate-pulse flex items-center justify-center">
              {/* Optional spinner or just the skeleton pulse */}
           </div>
@@ -56,7 +67,7 @@ function NHentaiCard({ gallery }: { gallery: any; key?: any }) {
             }
           }}
           alt={title}
-          className={`w-full h-full object-cover transition-all duration-500 group-hover:scale-105 ${imageLoaded ? 'opacity-100' : 'opacity-0 scale-95'}`}
+          className={`w-full h-full object-cover transition-all duration-300 group-hover:scale-105 ${isVisible ? 'opacity-100' : 'opacity-0 scale-95'}`}
           loading="lazy"
         />
         {/* Soft bottom gradient to blend with the card background */}
@@ -127,7 +138,10 @@ function NHentaiHome() {
         const res = await fetch(url);
         const data = await res.json();
         const results = Array.isArray(data) ? data : data.result || [];
-        setPopularGalleries(results.slice(0, 5));
+        const top5 = results.slice(0, 5);
+        const thumbs = top5.map((g: any) => g.thumbnail ? (g.thumbnail.startsWith('http') ? g.thumbnail : `https://t3.nhentai.net/${g.thumbnail}`) : `https://t3.nhentai.net/galleries/${g.media_id}/thumb.jpg`);
+        await preloadAnimeThumbnails(thumbs);
+        setPopularGalleries(top5);
       } catch (e) {
         console.error("Error fetching popular:", e);
       }
@@ -168,6 +182,8 @@ function NHentaiHome() {
 
         const startIndexInCombined = startItemIndex % 25;
         const sliced = combined.slice(startIndexInCombined, startIndexInCombined + displayCount);
+        const thumbs = sliced.map((g: any) => g.thumbnail ? (g.thumbnail.startsWith('http') ? g.thumbnail : `https://t3.nhentai.net/${g.thumbnail}`) : `https://t3.nhentai.net/galleries/${g.media_id}/thumb.jpg`);
+        await preloadAnimeThumbnails(thumbs);
         
         setGalleries(sliced);
       } catch (e) {
@@ -263,7 +279,7 @@ function NHentaiHome() {
           {loadingPopular ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 md:gap-5 justify-center max-w-[1150px] mx-auto">
               {Array.from({ length: 5 }).map((_, i) => (
-                <AnimeCardSkeleton key={i} />
+                <AnimeCardSkeleton key={i} index={i} />
               ))}
             </div>
           ) : popularGalleries.length > 0 ? (
@@ -285,7 +301,7 @@ function NHentaiHome() {
         {loading ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-4 md:gap-5">
             {Array.from({ length: displayCount }).map((_, i) => (
-              <AnimeCardSkeleton key={i} />
+              <AnimeCardSkeleton key={i} index={i} />
             ))}
           </div>
         ) : (

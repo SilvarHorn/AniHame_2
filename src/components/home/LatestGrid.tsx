@@ -121,7 +121,7 @@ export default React.memo(function LatestGrid({
               if (isLoading) {
                 return (
                   <div key={`skeleton-${index}`} className={visibilityClass}>
-                    <AnimeCardSkeleton />
+                    <AnimeCardSkeleton index={index} />
                   </div>
                 );
               }
@@ -134,7 +134,7 @@ export default React.memo(function LatestGrid({
                 }
                 return (
                   <div key={anime.id} className={visibilityClass}>
-                    <AnimeCard anime={anime} showProgress={true} progressEpisode={latestEp} />
+                    <AnimeCard anime={anime} showProgress={true} progressEpisode={latestEp} index={index} />
                   </div>
                 );
               }

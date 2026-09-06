@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { fetchAnilist, TRENDING_ANIME_QUERY } from '../api/anilist';
 import { AnimeMedia } from '../types';
 import AnimeCard from '../components/ui/AnimeCard';
+import AnimeCardSkeleton from '../components/ui/AnimeCardSkeleton';
+import { preloadAnimeThumbnails } from '../utils/imagePreload';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function Trending() {
@@ -12,6 +14,7 @@ export default function Trending() {
   const [hasNextPage, setHasNextPage] = useState(true);
 
   useEffect(() => {
+    let isCurrent = true;
     const fetchTrending = async () => {
       setLoading(true);
       setError('');
@@ -20,17 +23,26 @@ export default function Trending() {
           page: page, 
           perPage: 24,
         });
+        if (!isCurrent) return;
         const results = data?.Page?.media || [];
+        // Preload all anime thumbnails in parallel before updating state
+        await preloadAnimeThumbnails(results);
+        if (!isCurrent) return;
+
         setTrending(results);
         setHasNextPage(results.length === 24);
       } catch (error) {
+        if (!isCurrent) return;
         console.error('Error fetching trending:', error);
         setError('Failed to fetch trending anime.');
       } finally {
-        setLoading(false);
+        if (isCurrent) setLoading(false);
       }
     };
     fetchTrending();
+    return () => {
+      isCurrent = false;
+    };
   }, [page]);
 
   return (
@@ -42,8 +54,12 @@ export default function Trending() {
         </h1>
       </div>
 
-      {loading && trending.length === 0 ? (
-        <div className="min-h-[400px]"></div>
+      {loading ? (
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8 gap-4 md:gap-6 min-h-[400px]">
+          {Array.from({ length: 24 }).map((_, i) => (
+            <AnimeCardSkeleton key={`trending-skeleton-${i}`} index={i} />
+          ))}
+        </div>
       ) : error ? (
         <div className="text-center text-red-500 py-12">{error}</div>
       ) : trending.length > 0 ? (
@@ -58,8 +74,8 @@ export default function Trending() {
                 transition={{ duration: 0.3, ease: 'easeOut' }}
                 className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8 gap-4 md:gap-6"
               >
-                {trending.map(anime => (
-                  <AnimeCard key={anime.id} anime={anime} />
+                {trending.map((anime, idx) => (
+                  <AnimeCard key={anime.id} anime={anime} index={idx} />
                 ))}
               </motion.div>
             </AnimatePresence>

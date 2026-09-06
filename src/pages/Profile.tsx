@@ -7,6 +7,7 @@ import Cropper from 'react-easy-crop';
 import { useAuth, WatchServerType, DEFAULT_SERVER_ORDER, DEFAULT_CARD_BORDER } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import AnimeCard from '../components/ui/AnimeCard';
+import { preloadAnimeThumbnails } from '../utils/imagePreload';
 import { MyListStatus, getMyList, MyListItem } from '../utils/myList';
 import SingleSelect from '../components/ui/SingleSelect';
 import { ServerOrderManager } from '../components/player/ServerOrderManager';
@@ -376,6 +377,21 @@ export default function Profile() {
   const filteredList = activeTab === 'ALL' ? myList : myList.filter(i => i.status === activeTab);
   const totalPages = Math.ceil(filteredList.length / itemsPerPage);
   const paginatedList = filteredList.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
+  const [batchReady, setBatchReady] = useState(false);
+
+  useEffect(() => {
+    let isCurrent = true;
+    setBatchReady(false);
+    if (paginatedList.length === 0) {
+      setBatchReady(true);
+      return;
+    }
+    preloadAnimeThumbnails(paginatedList).then(() => {
+      if (isCurrent) setBatchReady(true);
+    });
+    return () => { isCurrent = false; };
+  }, [paginatedList]);
 
   return (
     <div className="w-full p-4 sm:p-6 lg:p-8">
@@ -1069,10 +1085,12 @@ export default function Profile() {
         {paginatedList.length > 0 ? (
           <>
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8 gap-4 md:gap-6">
-              {paginatedList.map((item) => (
+              {paginatedList.map((item, idx) => (
                 <AnimeCard 
                   key={item.animeId} 
                   anime={item.anime as any} 
+                  index={idx}
+                  batchReady={batchReady}
                 />
               ))}
             </div>

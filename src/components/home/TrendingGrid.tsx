@@ -111,12 +111,12 @@ export default React.memo(function TrendingGrid({ trending, country, onCountryCh
           {isLoading 
             ? Array.from({ length: 10 }).map((_, i) => (
                 <div key={`skeleton-${i}`} className="snap-start shrink-0 w-24 sm:w-28 md:w-32 lg:w-36">
-                  <AnimeCardSkeleton />
+                  <AnimeCardSkeleton index={i} />
                 </div>
               ))
-            : trending.map((anime) => (
+            : trending.map((anime, i) => (
                 <div key={anime.id} className="snap-start shrink-0 w-24 sm:w-28 md:w-32 lg:w-36">
-                  <AnimeCard anime={anime} />
+                  <AnimeCard anime={anime} index={i} />
                 </div>
               ))}
         </div>

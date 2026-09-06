@@ -4,14 +4,29 @@ import { WatchProgress } from '../types';
 import { Link } from 'react-router-dom';
 import { Play, X, User } from 'lucide-react';
 import AnimeCard from '../components/ui/AnimeCard';
+import { preloadAnimeThumbnails } from '../utils/imagePreload';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function ContinueWatching() {
   const [progress, setProgress] = useState<WatchProgress[]>([]);
+  const [batchReady, setBatchReady] = useState(false);
   const { profile } = useAuth();
 
   useEffect(() => {
-    setProgress(getProgress());
+    let isCurrent = true;
+    const items = getProgress();
+    setProgress(items);
+    if (items.length === 0) {
+      setBatchReady(true);
+      return;
+    }
+    const mediaItems = items.map(item => ({
+      coverImage: { large: item.coverImage }
+    }));
+    preloadAnimeThumbnails(mediaItems).then(() => {
+      if (isCurrent) setBatchReady(true);
+    });
+    return () => { isCurrent = false; };
   }, []);
 
   const cardBorder = profile?.preferences?.cardBorder;
@@ -45,9 +60,11 @@ export default function ContinueWatching() {
 
       {progress.length > 0 ? (
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8 gap-4 md:gap-6">
-          {progress.map((item) => (
+          {progress.map((item, index) => (
             <div key={item.animeId} className="relative group">
               <AnimeCard 
+                index={index}
+                batchReady={batchReady}
                 anime={{
                   id: item.animeId,
                   title: { romaji: item.animeTitle, english: item.animeTitle },

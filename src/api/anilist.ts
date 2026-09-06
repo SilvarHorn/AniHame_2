@@ -209,20 +209,34 @@ export const ANIME_DETAILS_QUERY = `
 export const SEARCH_ANIME_QUERY = `
   query($page: Int = 1, $perPage: Int = 20, $search: String, $genre_in: [String], $status_in: [MediaStatus], $seasonYear: Int, $season: MediaSeason, $format_in: [MediaFormat], $sort: [MediaSort] = [POPULARITY_DESC]) {
     Page(page: $page, perPage: $perPage) {
+      pageInfo {
+        hasNextPage
+        currentPage
+      }
       media(search: $search, genre_in: $genre_in, status_in: $status_in, seasonYear: $seasonYear, season: $season, format_in: $format_in, type: ANIME, isAdult: false, sort: $sort) {
         id
+        idMal
         format
         title {
           romaji
           english
+          native
         }
         coverImage {
+          extraLarge
           large
+          medium
         }
+        bannerImage
         averageScore
         episodes
         genres
         status
+        nextAiringEpisode {
+          airingAt
+          timeUntilAiring
+          episode
+        }
       }
     }
   }

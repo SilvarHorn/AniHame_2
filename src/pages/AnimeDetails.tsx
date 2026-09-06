@@ -10,6 +10,7 @@ import { AnimeInfo } from '../components/ui/AnimeInfo';
 import { getAnimeListStatus, addOrUpdateToList, removeFromList, MyListStatus } from '../utils/myList';
 import { useAuth } from '../contexts/AuthContext';
 import AnimeCard from '../components/ui/AnimeCard';
+import { preloadAnimeThumbnails } from '../utils/imagePreload';
 
 function RangeGridSelect({ value, onChange, options }: { value: string, onChange: (v: string)=>void, options: string[] }) {
   const [isOpen, setIsOpen] = React.useState(false);
@@ -253,6 +254,20 @@ export default function AnimeDetails() {
   };
 
   const relatedAnimeList = React.useMemo(() => anime ? getRelatedAnime(anime) : [], [anime]);
+  const [relationsBatchReady, setRelationsBatchReady] = React.useState(false);
+
+  React.useEffect(() => {
+    let isCurrent = true;
+    setRelationsBatchReady(false);
+    if (relatedAnimeList.length === 0) {
+      setRelationsBatchReady(true);
+      return;
+    }
+    preloadAnimeThumbnails(relatedAnimeList).then(() => {
+      if (isCurrent) setRelationsBatchReady(true);
+    });
+    return () => { isCurrent = false; };
+  }, [relatedAnimeList]);
 
   if (error) {
     return (
@@ -608,9 +623,9 @@ export default function AnimeDetails() {
                   </h2>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                  {relatedAnimeList.map(item => (
+                  {relatedAnimeList.map((item, idx) => (
                     <div key={item.node.id} className="flex flex-col gap-2">
-                      <AnimeCard anime={item.node} />
+                      <AnimeCard anime={item.node} index={idx} batchReady={relationsBatchReady} />
                       <span className="text-xs text-primary font-bold uppercase tracking-wider text-center">{item.relationType.replace(/_/g, ' ')}</span>
                     </div>
                   ))}
