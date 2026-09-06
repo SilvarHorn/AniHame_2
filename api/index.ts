@@ -273,7 +273,89 @@ app.get("/api/animeschedule/latest", async (req, res) => {
 // -----------------------------------------------------------------------------
 // GraphQL Schema Transformers (Converts Kitsu / AniSchedule into AniList Format)
 // -----------------------------------------------------------------------------
-function mapKitsuToAniListMedia(kitsuItem: any): any {
+const ANILIST_GENRES = new Set([
+  'Action',
+  'Adventure',
+  'Comedy',
+  'Drama',
+  'Ecchi',
+  'Fantasy',
+  'Hentai',
+  'Horror',
+  'Mahou Shoujo',
+  'Mecha',
+  'Music',
+  'Mystery',
+  'Psychological',
+  'Romance',
+  'Sci-Fi',
+  'Slice of Life',
+  'Sports',
+  'Supernatural',
+  'Thriller'
+]);
+
+const GENRE_ALIASES: Record<string, string> = {
+  'science fiction': 'Sci-Fi',
+  'sci-fi': 'Sci-Fi',
+  'magical girl': 'Mahou Shoujo',
+  'mahou shoujo': 'Mahou Shoujo',
+  'slice of life': 'Slice of Life'
+};
+
+function extractGenresAndTags(
+  rawGenres: any[] = [],
+  rawCategoriesOrThemes: any[] = []
+): { genres: string[]; tags: { name: string; isMediaSpoiler: boolean }[] } {
+  const normGenres: string[] = [];
+  const normTags: { name: string; isMediaSpoiler: boolean }[] = [];
+  const seenGenres = new Set<string>();
+  const seenTags = new Set<string>();
+
+  const allItems = [...rawGenres, ...rawCategoriesOrThemes];
+  for (const item of allItems) {
+    if (!item) continue;
+    const str = typeof item === 'string' ? item : (item.name || item.title || '');
+    const trimmed = str.trim();
+    if (!trimmed) continue;
+    const lower = trimmed.toLowerCase();
+
+    // Check if it's an AniList standard genre
+    let matchedGenre = GENRE_ALIASES[lower];
+    if (!matchedGenre) {
+      for (const g of ANILIST_GENRES) {
+        if (g.toLowerCase() === lower) {
+          matchedGenre = g;
+          break;
+        }
+      }
+    }
+
+    if (matchedGenre) {
+      if (!seenGenres.has(matchedGenre)) {
+        seenGenres.add(matchedGenre);
+        normGenres.push(matchedGenre);
+      }
+    } else {
+      // It's a tag! Format nicely as Title Case if lowercase
+      const tagTitle = trimmed.length > 2 ? trimmed.replace(/\b\w/g, (c: string) => c.toUpperCase()) : trimmed;
+      if (!seenTags.has(tagTitle.toLowerCase()) && !seenGenres.has(tagTitle)) {
+        seenTags.add(tagTitle.toLowerCase());
+        normTags.push({ name: tagTitle, isMediaSpoiler: false });
+      }
+    }
+  }
+
+  // If no standard genres were recognized, but we have tags, borrow 1-2 as genres
+  if (normGenres.length === 0 && normTags.length > 0) {
+    const candidate = normTags.shift();
+    if (candidate) normGenres.push(candidate.name);
+  }
+
+  return { genres: normGenres, tags: normTags };
+}
+
+function mapKitsuToAniListMedia(kitsuItem: any, genreMap?: any, categoryMap?: any): any {
   if (!kitsuItem || !kitsuItem.attributes) return null;
   const attr = kitsuItem.attributes;
   const kitsuId = parseInt(kitsuItem.id, 10);
@@ -282,9 +364,27 @@ function mapKitsuToAniListMedia(kitsuItem: any): any {
   const anilistId = mapping?.anilist_id || kitsuId;
   const malId = mapping?.mal_id || null;
 
-  const categories = Array.isArray(kitsuItem.categories)
-    ? kitsuItem.categories
-    : [];
+  let rawGenres: string[] = [];
+  if (Array.isArray(kitsuItem.genres) && kitsuItem.genres.length > 0) {
+    rawGenres = kitsuItem.genres;
+  } else if (genreMap && typeof genreMap.get === 'function' && Array.isArray(kitsuItem.relationships?.genres?.data)) {
+    rawGenres = kitsuItem.relationships.genres.data
+      .map((g: any) => genreMap.get(String(g.id)))
+      .filter(Boolean);
+  }
+
+  let rawCategories: string[] = [];
+  if (Array.isArray(kitsuItem.categories) && kitsuItem.categories.length > 0) {
+    rawCategories = kitsuItem.categories;
+  } else if (Array.isArray(attr.categories) && attr.categories.length > 0) {
+    rawCategories = attr.categories;
+  } else if (categoryMap && typeof categoryMap.get === 'function' && Array.isArray(kitsuItem.relationships?.categories?.data)) {
+    rawCategories = kitsuItem.relationships.categories.data
+      .map((c: any) => categoryMap.get(String(c.id)))
+      .filter(Boolean);
+  }
+
+  const { genres, tags } = extractGenresAndTags(rawGenres, rawCategories);
 
   return {
     id: anilistId,
@@ -307,8 +407,8 @@ function mapKitsuToAniListMedia(kitsuItem: any): any {
     description: attr.synopsis || attr.description || "",
     episodes: attr.episodeCount || null,
     status: attr.status === 'current' ? 'RELEASING' : (attr.status === 'finished' ? 'FINISHED' : 'NOT_YET_RELEASED'),
-    genres: categories.length > 0 ? categories : (attr.categories || []),
-    tags: [],
+    genres,
+    tags,
     startDate: attr.startDate ? {
       year: new Date(attr.startDate).getFullYear(),
       month: new Date(attr.startDate).getMonth() + 1,
@@ -334,6 +434,69 @@ function mapKitsuToAniListMedia(kitsuItem: any): any {
     } : null
   };
 }
+
+let popularAnimeCatalog: any[] = [];
+let popularCatalogFetchTime = 0;
+let popularCatalogLoadingPromise: Promise<any[]> | null = null;
+
+async function getPopularAnimeCatalog(): Promise<any[]> {
+  if (popularAnimeCatalog.length > 0 && Date.now() - popularCatalogFetchTime < 1000 * 60 * 60) {
+    return popularAnimeCatalog;
+  }
+  if (popularCatalogLoadingPromise) return popularCatalogLoadingPromise;
+
+  popularCatalogLoadingPromise = (async () => {
+    try {
+      // Fetch 160 top popular anime with genres and categories across 8 pages concurrently
+      const offsets = [0, 20, 40, 60, 80, 100, 120, 140];
+      const results = await Promise.allSettled(
+        offsets.map(offset =>
+          axios.get(`https://kitsu.io/api/edge/anime?sort=-userCount&page[limit]=20&page[offset]=${offset}&include=genres,categories`, {
+            headers: { "Accept": "application/vnd.api+json", "User-Agent": "Mozilla/5.0" },
+            timeout: 5000
+          })
+        )
+      );
+
+      const items: any[] = [];
+      for (const res of results) {
+        if (res.status !== 'fulfilled' || !res.value.data?.data) continue;
+        const json = res.value.data;
+        const genreIdToName = new Map<string, string>();
+        const categoryIdToName = new Map<string, string>();
+        if (Array.isArray(json.included)) {
+          for (const inc of json.included) {
+            if (inc.type === 'genres' && inc.attributes?.name) {
+              genreIdToName.set(String(inc.id), inc.attributes.name);
+            } else if (inc.type === 'categories' && (inc.attributes?.title || inc.attributes?.name)) {
+              categoryIdToName.set(String(inc.id), inc.attributes.title || inc.attributes.name);
+            }
+          }
+        }
+        for (const animeItem of json.data) {
+          const media = mapKitsuToAniListMedia(animeItem, genreIdToName, categoryIdToName);
+          if (media) items.push(media);
+        }
+      }
+
+      if (items.length > 0) {
+        popularAnimeCatalog = items;
+        popularCatalogFetchTime = Date.now();
+        return popularAnimeCatalog;
+      }
+    } catch (err: any) {
+      console.warn("Popular catalog fetch error:", err?.message || err);
+    } finally {
+      popularCatalogLoadingPromise = null;
+    }
+    return popularAnimeCatalog;
+  })();
+
+  return popularCatalogLoadingPromise;
+}
+
+// Background preload on start
+getPopularAnimeCatalog().catch(() => {});
 
 function mapScheduleItemToAniListMedia(item: any): any {
   if (!item) return null;
@@ -381,19 +544,26 @@ async function synthesizeAnilistFallback(body: any): Promise<any> {
   const isAdult = queryStr.includes('isAdult: true') || Boolean(variables.isAdult);
 
   // 1. Details Query (Media(id: $id))
-  if (queryStr.includes('Media(id:') || (queryStr.includes('query($id: Int)') && queryStr.includes('Media('))) {
+  if (/Media\s*\(\s*id\s*:/i.test(queryStr) || (/query\s*\(\s*\$id/i.test(queryStr) && /Media\s*\(/i.test(queryStr))) {
     const rawId = Number(variables.id);
     if (!rawId || isNaN(rawId)) return { data: { Media: null } };
 
-    // A. Check AniSchedule dataset first (instant match for active airing anime)
+    // Check AniSchedule dataset for active airing anime episode info
     const scheduleItems = await getAniScheduleFeed();
     const scheduled = scheduleItems.find(s => s.id === rawId || s.idMal === rawId);
+    let nextAiringEpisode = null;
     if (scheduled) {
-      const media = mapScheduleItemToAniListMedia(scheduled);
-      if (media) return { data: { Media: media } };
+      const nextNode = scheduled.airingSchedule?.nodes?.[0];
+      if (nextNode) {
+        nextAiringEpisode = {
+          airingAt: nextNode.airingAt,
+          episode: nextNode.episode,
+          timeUntilAiring: Math.max(0, nextNode.airingAt - Math.floor(Date.now() / 1000))
+        };
+      }
     }
 
-    // B. Check ID Mapping to resolve kitsu_id and mal_id
+    // Check ID Mapping to resolve kitsu_id and mal_id
     let mapping = anilistToMapping.get(rawId);
     if (!mapping && anilistToMapping.size === 0) {
       await preloadAnimeMappings();
@@ -403,9 +573,9 @@ async function synthesizeAnilistFallback(body: any): Promise<any> {
     let kitsuId = mapping?.kitsu_id;
     let malId = mapping?.mal_id || rawId;
 
-    // C. Try Kitsu Details (high reliability & speed)
+    // A. Try Kitsu Details (high reliability, full tags and categories)
     try {
-      let kitsuUrl = kitsuId ? `https://kitsu.io/api/edge/anime/${kitsuId}?include=categories` : null;
+      let kitsuUrl = kitsuId ? `https://kitsu.io/api/edge/anime/${kitsuId}?include=categories,genres` : null;
 
       if (!kitsuUrl && malId) {
         // Resolve via Kitsu MAL mapping
@@ -415,38 +585,58 @@ async function synthesizeAnilistFallback(body: any): Promise<any> {
         const mappedItem = kitsuMapRes.data?.included?.[0];
         if (mappedItem?.id) {
           kitsuId = mappedItem.id;
-          kitsuUrl = `https://kitsu.io/api/edge/anime/${kitsuId}?include=categories`;
+          kitsuUrl = `https://kitsu.io/api/edge/anime/${kitsuId}?include=categories,genres`;
         }
       }
 
       if (kitsuUrl) {
-        const kitsuRes = await axios.get(kitsuUrl, { timeout: 3500 });
+        const kitsuRes = await axios.get(kitsuUrl, {
+          timeout: 4000,
+          headers: { "Accept": "application/vnd.api+json", "User-Agent": "Mozilla/5.0" }
+        });
         if (kitsuRes.data?.data) {
           const item = kitsuRes.data.data;
-          const categories = (kitsuRes.data.included || [])
+          const included = Array.isArray(kitsuRes.data.included) ? kitsuRes.data.included : [];
+          const rawCategories = included
             .filter((inc: any) => inc.type === 'categories')
-            .map((c: any) => c.attributes?.title)
+            .map((c: any) => c.attributes?.title || c.attributes?.name)
+            .filter(Boolean);
+          const rawGenres = included
+            .filter((inc: any) => inc.type === 'genres')
+            .map((g: any) => g.attributes?.name)
             .filter(Boolean);
 
-          item.categories = categories;
+          const { genres: finalGenres, tags: finalTags } = extractGenresAndTags(rawGenres, rawCategories);
           const media = mapKitsuToAniListMedia(item);
           if (media) {
             media.id = rawId;
             media.idMal = malId;
+            if (finalGenres.length > 0) media.genres = finalGenres;
+            if (finalTags.length > 0) media.tags = finalTags;
+            if (nextAiringEpisode) {
+              media.nextAiringEpisode = nextAiringEpisode;
+            }
             return { data: { Media: media } };
           }
         }
       }
     } catch {}
 
-    // D. Try Jikan details if Kitsu was unavailable
+    // B. Try Jikan details (extracting themes, demographics, genres)
     try {
       const jikanRes = await axios.get(`https://api.jikan.moe/v4/anime/${malId}/full`, {
-        timeout: 3000,
+        timeout: 3500,
         validateStatus: () => true
       });
       if (jikanRes.status === 200 && jikanRes.data?.data) {
         const d = jikanRes.data.data;
+        const jikanGenres = Array.isArray(d.genres) ? d.genres.map((g: any) => g.name) : [];
+        const jikanThemesAndDemos = [
+          ...(Array.isArray(d.themes) ? d.themes.map((t: any) => t.name) : []),
+          ...(Array.isArray(d.demographics) ? d.demographics.map((dm: any) => dm.name) : []),
+          ...(Array.isArray(d.explicit_genres) ? d.explicit_genres.map((eg: any) => eg.name) : [])
+        ];
+        const { genres: finalGenres, tags: finalTags } = extractGenresAndTags(jikanGenres, jikanThemesAndDemos);
         const media = {
           id: rawId,
           idMal: malId,
@@ -468,13 +658,28 @@ async function synthesizeAnilistFallback(body: any): Promise<any> {
           description: d.synopsis || "",
           episodes: d.episodes || null,
           status: d.airing ? "RELEASING" : "FINISHED",
-          genres: Array.isArray(d.genres) ? d.genres.map((g: any) => g.name) : [],
-          studios: { edges: [] },
-          relations: { edges: [] }
+          genres: finalGenres,
+          tags: finalTags,
+          studios: {
+            edges: Array.isArray(d.studios) ? d.studios.map((s: any) => ({ isMain: true, node: { name: s.name } })) : []
+          },
+          trailer: d.trailer?.youtube_id ? {
+            id: d.trailer.youtube_id,
+            site: "youtube",
+            thumbnail: d.trailer.images?.maximum_image_url || d.trailer.images?.large_image_url || ""
+          } : null,
+          relations: { edges: [] },
+          nextAiringEpisode
         };
         return { data: { Media: media } };
       }
     } catch {}
+
+    // C. Fallback to AniSchedule dataset
+    if (scheduled) {
+      const media = mapScheduleItemToAniListMedia(scheduled);
+      if (media) return { data: { Media: media } };
+    }
 
     return { data: { Media: null } };
   }
@@ -640,140 +845,115 @@ async function synthesizeAnilistFallback(body: any): Promise<any> {
 
   if (isSearchOrFilter) {
     try {
-      let kitsuUrl = 'https://kitsu.io/api/edge/anime?';
-      const params: string[] = [];
+      const [catalog, scheduleItems] = await Promise.all([
+        getPopularAnimeCatalog(),
+        getAniScheduleFeed()
+      ]);
 
-      // Text search
+      const scheduleMedia = scheduleItems.map(mapScheduleItemToAniListMedia).filter(Boolean);
+
+      // Unified deduplicated pool
+      const seenIds = new Set<number>();
+      const seenTitles = new Set<string>();
+      const pool: any[] = [];
+
+      for (const anime of [...catalog, ...scheduleMedia]) {
+        if (!anime || !anime.id) continue;
+        const key = (anime.title?.english || anime.title?.romaji || '').toLowerCase().trim();
+        if (seenIds.has(anime.id) || (key && seenTitles.has(key))) continue;
+        seenIds.add(anime.id);
+        if (key) seenTitles.add(key);
+        pool.push(anime);
+      }
+
+      let filtered = pool;
+
+      // 1. Search Query Filter (Text search in titles, description, genres, tags)
       if (variables.search && String(variables.search).trim()) {
-        params.push(`filter[text]=${encodeURIComponent(String(variables.search).trim())}`);
+        const q = String(variables.search).toLowerCase().trim();
+        filtered = filtered.filter(anime => {
+          const romaji = (anime.title?.romaji || '').toLowerCase();
+          const english = (anime.title?.english || '').toLowerCase();
+          const native = (anime.title?.native || '').toLowerCase();
+          const desc = (anime.description || '').toLowerCase();
+          const genres = (anime.genres || []).map((g: string) => g.toLowerCase());
+          const tags = (anime.tags || []).map((t: any) => (typeof t === 'string' ? t : t?.name || '').toLowerCase());
+          return (
+            romaji.includes(q) ||
+            english.includes(q) ||
+            native.includes(q) ||
+            desc.includes(q) ||
+            genres.some((g: string) => g.includes(q) || q.includes(g)) ||
+            tags.some((t: string) => t.includes(q) || q.includes(t))
+          );
+        });
       }
 
-      // Genre filter mapping
-      const genreMap: Record<string, string> = {
-        'mahou shoujo': 'magical-girl',
-        'sci-fi': 'science-fiction',
-        'slice of life': 'slice-of-life',
-        'action': 'action',
-        'adventure': 'adventure',
-        'comedy': 'comedy',
-        'drama': 'drama',
-        'ecchi': 'ecchi',
-        'fantasy': 'fantasy',
-        'horror': 'horror',
-        'mecha': 'mecha',
-        'music': 'music',
-        'mystery': 'mystery',
-        'psychological': 'psychological',
-        'romance': 'romance',
-        'sports': 'sports',
-        'supernatural': 'supernatural',
-        'thriller': 'thriller'
-      };
-
+      // 2. Genre Filter (Only match anime containing the requested genre)
       if (Array.isArray(variables.genre_in) && variables.genre_in.length > 0) {
-        const mappedGenres = variables.genre_in.map((g: string) => {
-          const key = String(g).toLowerCase().trim();
-          return genreMap[key] || key.replace(/\s+/g, '-');
+        const requiredGenres = variables.genre_in.map((g: string) => String(g).toLowerCase().trim());
+        filtered = filtered.filter(anime => {
+          const animeGenres = (anime.genres || []).map((g: string) => String(g).toLowerCase().trim());
+          return requiredGenres.some(rg =>
+            animeGenres.some(ag => ag === rg || ag.includes(rg) || rg.includes(ag))
+          );
         });
-        params.push(`filter[categories]=${encodeURIComponent(mappedGenres.join(','))}`);
       }
 
-      // Format filter mapping
-      const formatMap: Record<string, string> = {
-        'tv': 'tv',
-        'tv_short': 'tv',
-        'movie': 'movie',
-        'special': 'special',
-        'ova': 'ova',
-        'ona': 'ona',
-        'music': 'music'
-      };
-
+      // 3. Format Filter
       if (Array.isArray(variables.format_in) && variables.format_in.length > 0) {
-        const mappedFormats = variables.format_in.map((f: string) => {
-          const key = String(f).toLowerCase().trim();
-          return formatMap[key] || key;
-        });
-        params.push(`filter[subtype]=${encodeURIComponent(mappedFormats.join(','))}`);
+        const reqFormats = variables.format_in.map((f: string) => String(f).toUpperCase().trim());
+        filtered = filtered.filter(anime => reqFormats.includes(String(anime.format || 'TV').toUpperCase()));
       }
 
-      // Status filter mapping
-      const statusMap: Record<string, string> = {
-        'releasing': 'current',
-        'finished': 'finished',
-        'not_yet_released': 'upcoming',
-        'cancelled': 'unreleased'
-      };
-
+      // 4. Status Filter
       if (Array.isArray(variables.status_in) && variables.status_in.length > 0) {
-        const mappedStatuses = variables.status_in.map((s: string) => {
-          const key = String(s).toLowerCase().trim();
-          return statusMap[key] || key;
-        });
-        params.push(`filter[status]=${encodeURIComponent(mappedStatuses.join(','))}`);
+        const reqStatuses = variables.status_in.map((s: string) => String(s).toUpperCase().trim());
+        filtered = filtered.filter(anime => reqStatuses.includes(String(anime.status || 'FINISHED').toUpperCase()));
       }
 
-      // Year filter
+      // 5. Year Filter
       if (variables.seasonYear) {
-        params.push(`filter[seasonYear]=${encodeURIComponent(String(variables.seasonYear))}`);
+        const reqYear = Number(variables.seasonYear);
+        filtered = filtered.filter(anime => anime.startDate?.year === reqYear || anime.seasonYear === reqYear);
       }
 
-      // Season filter
+      // 6. Season Filter
       if (variables.season) {
-        params.push(`filter[season]=${encodeURIComponent(String(variables.season).toLowerCase().trim())}`);
+        const reqSeason = String(variables.season).toUpperCase().trim();
+        filtered = filtered.filter(anime => String(anime.season || '').toUpperCase() === reqSeason);
       }
 
-      // Sort mapping
+      // 7. Sort
       const rawSort = Array.isArray(variables.sort) ? variables.sort[0] : (variables.sort || 'POPULARITY_DESC');
-      let sortParam = '-userCount';
-      if (rawSort === 'SCORE_DESC') sortParam = '-averageRating';
-      else if (rawSort === 'START_DATE_DESC') sortParam = '-startDate';
-      else if (rawSort === 'UPDATED_AT_DESC') sortParam = '-updatedAt';
-      else if (rawSort === 'TRENDING_DESC') sortParam = '-favoritesCount';
-
-      if (!variables.search || rawSort !== 'POPULARITY_DESC') {
-        params.push(`sort=${sortParam}`);
+      if (rawSort === 'SCORE_DESC') {
+        filtered.sort((a, b) => (b.averageScore || 0) - (a.averageScore || 0));
+      } else if (rawSort === 'START_DATE_DESC') {
+        filtered.sort((a, b) => (b.startDate?.year || b.seasonYear || 0) - (a.startDate?.year || a.seasonYear || 0));
+      } else if (rawSort === 'TRENDING_DESC' || rawSort === 'UPDATED_AT_DESC') {
+        filtered.sort((a, b) => (b.averageScore || 0) - (a.averageScore || 0));
       }
 
-      kitsuUrl += params.join('&');
+      // 8. Pagination
+      const startIndex = (page - 1) * limit;
+      const paginated = filtered.slice(startIndex, startIndex + limit);
+      const hasNextPage = startIndex + limit < filtered.length;
 
-      let allData: any[] = [];
-      let hasNextPage = false;
-
-      if (limit > 20) {
-        // Fetch 2 concurrent pages to satisfy limit (e.g. 24 items)
-        const [r1, r2] = await Promise.allSettled([
-          axios.get(`${kitsuUrl}&page[limit]=20&page[offset]=${offset}`, { timeout: 4000 }),
-          axios.get(`${kitsuUrl}&page[limit]=20&page[offset]=${offset + 20}`, { timeout: 4000 })
-        ]);
-
-        const d1 = r1.status === 'fulfilled' && Array.isArray(r1.value.data?.data) ? r1.value.data.data : [];
-        const d2 = r2.status === 'fulfilled' && Array.isArray(r2.value.data?.data) ? r2.value.data.data : [];
-        const combined = [...d1, ...d2];
-        allData = combined.slice(0, limit);
-        hasNextPage = combined.length > limit || (r2.status === 'fulfilled' && d2.length > 4);
-      } else {
-        const res = await axios.get(`${kitsuUrl}&page[limit]=${limit}&page[offset]=${offset}`, { timeout: 4000 });
-        if (res.status === 200 && Array.isArray(res.data?.data)) {
-          allData = res.data.data;
-          hasNextPage = allData.length === limit;
-        }
-      }
-
-      const media = allData.map(mapKitsuToAniListMedia).filter(Boolean);
       return {
         data: {
           Page: {
             pageInfo: {
               hasNextPage,
-              currentPage: page
+              currentPage: page,
+              perPage: limit,
+              total: filtered.length
             },
-            media
+            media: paginated
           }
         }
       };
     } catch (e: any) {
-      console.error('Kitsu Explore search error:', e?.message || e);
+      console.error('Explore search error:', e?.message || e);
     }
   }
 
@@ -1206,7 +1386,7 @@ app.get("/api/kitsu/anime/:kitsuId", async (req, res) => {
     const cached = getCached(cacheKey);
     if (cached) return res.json(cached);
 
-    const response = await axios.get(`https://kitsu.io/api/edge/anime/${kitsuId}`, {
+    const response = await axios.get(`https://kitsu.io/api/edge/anime/${kitsuId}?include=categories,genres`, {
       timeout: 4000,
       headers: {
         'Accept': 'application/vnd.api+json',

@@ -165,7 +165,7 @@ export const kitsuClient = {
     }
   },
   
-  // Gets anime info to get the rating
+  // Gets anime info to get the rating and categories
   async getAnime(kitsuId: string): Promise<any> {
     const cacheKey = `anime-info-${kitsuId}`;
     if (kitsuCache.has(cacheKey)) return kitsuCache.get(cacheKey);
@@ -174,8 +174,9 @@ export const kitsuClient = {
       const res = await fetch(`/api/kitsu/anime/${kitsuId}`);
       if (!res.ok) return null;
       const data = await res.json();
-      kitsuCache.set(cacheKey, data.data);
-      return data.data;
+      const result = { ...(data.data || {}), included: data.included || [] };
+      kitsuCache.set(cacheKey, result);
+      return result;
     } catch(e) {
       return null;
     }

@@ -85,7 +85,7 @@ export default function Explore() {
   
   const [localFilters, setLocalFilters] = useState({
     searchQuery: searchParams.get('search') || '',
-    genres: searchParams.get('genre') ? [searchParams.get('genre') as string] : [],
+    genres: searchParams.get('genre') ? (searchParams.get('genre') as string).split(',').map(s => s.trim()).filter(Boolean) : [],
     status: '',
     year: '' as string | number,
     season: '',
@@ -103,21 +103,22 @@ export default function Explore() {
   const [page, setPage] = useState(1);
   const [hasNextPage, setHasNextPage] = useState(true);
 
-  // Sync initial query if it changes from URL (e.g. Navbar search or tags)
+  // Sync initial query if it changes from URL (e.g. Navbar search, tags, or genre links)
   useEffect(() => {
     const q = searchParams.get('search') || '';
-    const g = searchParams.get('genre') || '';
+    const genreParam = searchParams.get('genre');
+    const gList = genreParam ? genreParam.split(',').map(s => s.trim()).filter(Boolean) : [];
     
     setLocalFilters(prev => ({
       ...prev,
       searchQuery: q,
-      genres: g ? [g] : prev.genres
+      genres: gList
     }));
     
     setAppliedFilters(prev => ({
       ...prev,
       searchQuery: q,
-      genres: g ? [g] : prev.genres
+      genres: gList
     }));
     
     setPage(1);
@@ -173,6 +174,16 @@ export default function Explore() {
     setAppliedFilters({ ...localFilters });
     setPage(1);
     setShowFilters(false);
+
+    // Sync search and genre to URL searchParams
+    const nextParams: Record<string, string> = {};
+    if (localFilters.searchQuery.trim()) {
+      nextParams.search = localFilters.searchQuery.trim();
+    }
+    if (localFilters.genres.length > 0) {
+      nextParams.genre = localFilters.genres.join(',');
+    }
+    setSearchParams(nextParams);
   };
 
   const handleReset = () => {
@@ -189,6 +200,7 @@ export default function Explore() {
     setAppliedFilters(defaultFilters);
     setPage(1);
     setShowFilters(false);
+    setSearchParams({});
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -198,11 +210,31 @@ export default function Explore() {
   };
 
   // Remove specific active filter
+  const removeSearch = () => {
+    setLocalFilters(prev => ({ ...prev, searchQuery: '' }));
+    setAppliedFilters(prev => ({ ...prev, searchQuery: '' }));
+    setPage(1);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.delete('search');
+      return next;
+    });
+  };
+
   const removeGenre = (g: string) => {
     const next = appliedFilters.genres.filter(item => item !== g);
     setLocalFilters(prev => ({ ...prev, genres: next }));
     setAppliedFilters(prev => ({ ...prev, genres: next }));
     setPage(1);
+    setSearchParams(prev => {
+      const nextParams = new URLSearchParams(prev);
+      if (next.length > 0) {
+        nextParams.set('genre', next.join(','));
+      } else {
+        nextParams.delete('genre');
+      }
+      return nextParams;
+    });
   };
 
   const removeFormat = (f: string | number) => {
@@ -227,12 +259,6 @@ export default function Explore() {
   const removeYear = () => {
     setLocalFilters(prev => ({ ...prev, year: '' }));
     setAppliedFilters(prev => ({ ...prev, year: '' }));
-    setPage(1);
-  };
-
-  const removeSearch = () => {
-    setLocalFilters(prev => ({ ...prev, searchQuery: '' }));
-    setAppliedFilters(prev => ({ ...prev, searchQuery: '' }));
     setPage(1);
   };
 
