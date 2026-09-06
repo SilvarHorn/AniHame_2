@@ -102,10 +102,20 @@ export default function Home() {
     setLatestPage(1);
   }, [latestCountry]);
 
-  if (error) {
+  if (error && trending.length === 0 && latest.length === 0 && !loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-red-500 font-medium">Error: {error}</div>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
+        <div className="text-red-400 font-medium">Error: {error}</div>
+        <button
+          onClick={() => {
+            setError('');
+            setLoading(true);
+            window.location.reload();
+          }}
+          className="px-4 py-2 bg-primary text-black font-semibold rounded-lg hover:bg-primary/90 transition-colors text-sm"
+        >
+          Retry
+        </button>
       </div>
     );
   }

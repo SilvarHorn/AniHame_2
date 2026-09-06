@@ -1,11 +1,26 @@
-import { isHanimeMode } from './anilist';
+import { isHanimeMode, fetchAnilist, TRENDING_ANIME_QUERY } from './anilist';
 
 let cachedFeed: any = null;
 let cachedSchedule: any = null;
 let lastFetchTime = 0;
-const CACHE_TTL = 1000 * 60 * 5; // 5 minutes
+const CACHE_TTL = 1000 * 60 * 10; // 10 minutes
 
 export async function fetchLatestUpdated(page = 1, perPage = 24) {
+  // 1. Try lightning-fast server proxy first
+  try {
+    const isAdult = isHanimeMode();
+    const res = await fetch(`/api/animeschedule/latest?page=${page}&perPage=${perPage}&isAdult=${isAdult}`);
+    if (res.ok) {
+      const json = await res.json();
+      if (Array.isArray(json?.media) && json.media.length > 0) {
+        return json;
+      }
+    }
+  } catch (serverErr) {
+    console.warn("Server latest route unavailable, falling back to direct fetch", serverErr);
+  }
+
+  // 2. Direct client fetch fallback
   try {
     let feed, schedule;
     
@@ -30,14 +45,11 @@ export async function fetchLatestUpdated(page = 1, perPage = 24) {
       lastFetchTime = Date.now();
     }
 
-
-    // Create a map for quick schedule lookup
     const scheduleMap = new Map();
     for (const anime of schedule) {
       scheduleMap.set(anime.id, anime);
     }
 
-    // Extract unique anime from the feed
     const uniqueAnimeIds = new Set();
     const latestAnime = [];
 
@@ -48,7 +60,6 @@ export async function fetchLatestUpdated(page = 1, perPage = 24) {
       if (details && (isHanimeMode() ? details.isAdult : !details.isAdult)) {
         uniqueAnimeIds.add(item.id);
         
-        // Map to AnimeMedia format
         latestAnime.push({
           id: details.id,
           idMal: details.idMal,
@@ -63,17 +74,15 @@ export async function fetchLatestUpdated(page = 1, perPage = 24) {
           genres: details.genres,
           seasonYear: details.seasonYear,
           isAdult: details.isAdult,
-          episodes: item.episode.aired, // Use the aired episode count as the episode number for the card
+          episodes: item.episode.aired,
           nextAiringEpisode: {
-            episode: item.episode.aired + 1, // The UI usually subtracts 1 to show latest, or we just set it up carefully
+            episode: item.episode.aired + 1,
             airingAt: Math.floor(new Date(item.episode.airedAt).getTime() / 1000)
-          },
-          // Or we can just set episode directly if UI supports it, wait, what does LatestGrid use?
+          }
         });
       }
     }
 
-    // Pagination
     const start = (page - 1) * perPage;
     const end = start + perPage;
     const paginated = latestAnime.slice(start, end);
@@ -86,7 +95,18 @@ export async function fetchLatestUpdated(page = 1, perPage = 24) {
       }
     };
   } catch (error) {
-    console.error("Error fetching latest from AniSchedule:", error);
-    throw error;
+    console.warn("AniSchedule fallback to Trending query:", error);
+    // 3. Guaranteed graceful fallback: fetch trending so UI never breaks
+    try {
+      const fallbackData = await fetchAnilist(TRENDING_ANIME_QUERY, { page, perPage });
+      if (fallbackData?.Page?.media) {
+        return {
+          media: fallbackData.Page.media,
+          pageInfo: fallbackData.Page.pageInfo || { hasNextPage: false }
+        };
+      }
+    } catch {}
+
+    return { media: [], pageInfo: { hasNextPage: false } };
   }
 }

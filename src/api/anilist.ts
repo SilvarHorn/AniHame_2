@@ -16,9 +16,10 @@ export function isHanimeMode() {
 
 
 const requestCache = new Map<string, { data: any, timestamp: number }>();
-const CACHE_TTL = 1000 * 60 * 5; // 5 minutes cache
+const CACHE_TTL = 1000 * 60 * 10; // 10 minutes cache
+const inflightPromises = new Map<string, Promise<any>>();
 
-export async function fetchAnilist<T = any>(query: string, variables: any = {}, retries = 5): Promise<T> {
+export async function fetchAnilist<T = any>(query: string, variables: any = {}, retries = 2): Promise<T> {
   let finalQuery = query;
   if (isHanimeMode()) {
     finalQuery = finalQuery.replace(/isAdult:\s*false/g, 'isAdult: true');
@@ -29,42 +30,53 @@ export async function fetchAnilist<T = any>(query: string, variables: any = {}, 
     return cached.data as T;
   }
 
-  for (let i = 0; i < retries; i++) {
-
-    try {
-      const response = await fetch(ANILIST_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({ query: finalQuery, variables })
-      });
-      
-      const json = await response.json().catch(()=>null);
-      if (json && json.errors) {
-        throw new Error(json.errors[0].message);
-      }
-
-      if (response.ok && json && !json.errors) {
-        requestCache.set(cacheKey, { data: json.data, timestamp: Date.now() });
-      }
-      
-      if (!response.ok) {
-        if (response.status === 429) {
-          const delay = parseInt(response.headers.get('Retry-After') || '0') * 1000 || (1000 * Math.pow(2, i) + Math.random() * 1000);
-          await new Promise(r => setTimeout(r, delay));
-          continue;
-        }
-        throw new Error('HTTP Error ' + response.status);
-      }
-      return json.data;
-    } catch (err: any) {
-      if (i === retries - 1) throw err;
-      await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i) + Math.random() * 1000));
-    }
+  if (inflightPromises.has(cacheKey)) {
+    return inflightPromises.get(cacheKey)!;
   }
-  throw new Error('Failed to fetch from AniList API');
+
+  const promise = (async () => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const response = await fetch(ANILIST_API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify({ query: finalQuery, variables })
+        });
+        
+        const json = await response.json().catch(() => null);
+        if (json && json.errors && !json.data) {
+          throw new Error(json.errors[0].message);
+        }
+
+        if (response.ok && json && json.data) {
+          requestCache.set(cacheKey, { data: json.data, timestamp: Date.now() });
+          return json.data as T;
+        }
+        
+        if (!response.ok) {
+          if (response.status === 429) {
+            const delay = parseInt(response.headers.get('Retry-After') || '1', 10) * 1000;
+            await new Promise(r => setTimeout(r, Math.min(delay, 2000)));
+            continue;
+          }
+          throw new Error('HTTP Error ' + response.status);
+        }
+        return json.data;
+      } catch (err: any) {
+        if (i === retries - 1) throw err;
+        await new Promise(r => setTimeout(r, 300 * (i + 1)));
+      }
+    }
+    throw new Error('Failed to fetch from AniList API');
+  })().finally(() => {
+    inflightPromises.delete(cacheKey);
+  });
+
+  inflightPromises.set(cacheKey, promise);
+  return promise;
 }
 
 export const TRENDING_ANIME_QUERY = `
