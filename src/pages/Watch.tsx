@@ -211,54 +211,62 @@ export default function Watch() {
                 }
               }
               
-              if (data.Media.idMal) {
-                try {
-                  const { malClient } = await import('../api/mal');
-                  
-                  // Fetch the anime format/type from MAL
-                  malClient.getAnimeType(data.Media.idMal).then(malType => {
-                    if (malType) {
-                      setAnime(prev => prev ? { ...prev, format: malType.toUpperCase() } : prev);
-                    }
-                  }).catch(console.error);
+              const malId = data.Media.idMal || (mapping?.mal_id ? Number(mapping.mal_id) : null);
+              if (malId) {
+                if (!data.Media.format) {
+                  import('../api/mal').then(({ malClient }) => {
+                    malClient.getAnimeType(malId).then(malType => {
+                      if (malType) {
+                        setAnime(prev => prev ? { ...prev, format: malType.toUpperCase() } : prev);
+                      }
+                    }).catch(() => {});
+                  }).catch(() => {});
+                }
 
+                let epCount = data.Media.episodes || 12;
+                if (data.Media.nextAiringEpisode) {
+                  epCount = data.Media.nextAiringEpisode.episode - 1;
+                }
+
+                const hasFullAnilistEps = Array.isArray(data.Media.streamingEpisodes) &&
+                  data.Media.streamingEpisodes.length >= Math.min(epCount, 24);
+
+                if (!hasFullAnilistEps) {
                   const currentEpNum = isNaN(currentEp) ? 1 : currentEp;
                   const pStart = Math.max(1, Math.floor((currentEpNum - 1) / 100) * 100 + 1);
                   const pEnd = pStart + 99;
-                  const malEpData = await malClient.getEpisodes(
-                    data.Media.idMal,
-                    { start: pStart, end: pEnd },
-                    (newEps) => {
-                      setMalEpisodes([...newEps]);
-                    }
-                  );
-                  if (malEpData && malEpData.length > 0) {
-                    setMalEpisodes([...malEpData]);
-                  }
-                } catch (e) {
-                  console.error('Failed to fetch MAL episodes', e);
-                }
 
-                try {
-                  const { kitsuClient } = await import('../api/kitsu');
-                  const kitsuId = await kitsuClient.getKitsuIdByMalId(data.Media.idMal);
-                  if (kitsuId) {
-                    const currentEpNum = isNaN(currentEp) ? 1 : currentEp;
-                    const pStart = Math.max(1, Math.floor((currentEpNum - 1) / 100) * 100 + 1);
-                    const pEnd = pStart + 99;
-                    const epData = await kitsuClient.getEpisodes(
-                      kitsuId,
-                      { start: pStart, end: pEnd },
-                      (newEps) => {
-                        setKitsuEpisodes([...newEps]);
+                  try {
+                    const { kitsuClient } = await import('../api/kitsu');
+                    const kitsuId = await kitsuClient.getKitsuIdByMalId(malId);
+                    if (kitsuId) {
+                      const epData = await kitsuClient.getEpisodes(
+                        kitsuId,
+                        { start: pStart, end: pEnd },
+                        (newEps) => {
+                          setKitsuEpisodes([...newEps]);
+                        }
+                      );
+                      if (epData && epData.length > 0) {
+                        setKitsuEpisodes([...epData]);
                       }
-                    );
-                    if (epData && epData.length > 0) {
-                      setKitsuEpisodes([...epData]);
+                    } else {
+                      // Only fetch from MAL if Kitsu is unavailable
+                      const { malClient } = await import('../api/mal');
+                      const malEpData = await malClient.getEpisodes(
+                        malId,
+                        { start: pStart, end: pEnd },
+                        (newEps) => {
+                          setMalEpisodes([...newEps]);
+                        }
+                      );
+                      if (malEpData && malEpData.length > 0) {
+                        setMalEpisodes([...malEpData]);
+                      }
                     }
+                  } catch (e) {
+                    console.error('Watch episode fetch error', e);
                   }
-                } catch (e) {
-                  console.error('Failed to fetch Kitsu episodes', e);
                 }
               }
             })

@@ -104,6 +104,10 @@ export default function AnimeDetails() {
   const [fillerEpisodes, setFillerEpisodes] = useState<number[]>([]);
   const [watchedEpisodes, setWatchedEpisodes] = useState<number[]>([]);
   const [malTitle, setMalTitle] = useState<string | null>(null);
+  const [kitsuId, setKitsuId] = useState<string | null>(null);
+  const [malScore, setMalScore] = useState<number | null>(null);
+  const [kitsuScore, setKitsuScore] = useState<number | null>(null);
+  const [ageRating, setAgeRating] = useState<string | null>(null);
 
   useEffect(() => {
     const loadDetails = async () => {
@@ -150,53 +154,61 @@ export default function AnimeDetails() {
             .then(async mapping => {
               let iId = null;
               if (mapping && mapping.imdb_id && mapping.imdb_id.length > 0) {
-                // Sometimes it's an array, sometimes maybe a string, handle safely
                 iId = Array.isArray(mapping.imdb_id) ? mapping.imdb_id[0] : mapping.imdb_id;
                 setImdbId(iId);
               }
               
-              if (data.Media.idMal) {
-                try {
-                  const { malClient } = await import('../api/mal');
-                  
-                  // Fetch the anime format/type from MAL
-                  malClient.getAnimeType(data.Media.idMal).then(malType => {
-                    if (malType) {
-                      setAnime(prev => prev ? { ...prev, format: malType.toUpperCase() } : prev);
-                    }
-                  }).catch(console.error);
-
-                  const malEpData = await malClient.getEpisodes(
-                    data.Media.idMal,
-                    priorityRange,
-                    (newEps) => {
-                      setMalEpisodes([...newEps]);
-                    }
-                  );
-                  if (malEpData && malEpData.length > 0) {
-                    setMalEpisodes([...malEpData]);
-                  }
-                } catch (e) {
-                  console.error('Failed to fetch MAL episodes', e);
-                }
-
-                try {
-                  const { kitsuClient } = await import('../api/kitsu');
-                  const kitsuId = await kitsuClient.getKitsuIdByMalId(data.Media.idMal);
-                  if (kitsuId) {
-                    const epData = await kitsuClient.getEpisodes(
-                      kitsuId,
-                      priorityRange,
-                      (newEps) => {
-                        setKitsuEpisodes([...newEps]);
+              const malId = data.Media.idMal || (mapping?.mal_id ? Number(mapping.mal_id) : null);
+              if (malId) {
+                // 1. Fetch metadata (score, age rating, type) via server proxy with 12h cache
+                fetch(`/api/mal/anime/${malId}`)
+                  .then(res => res.ok ? res.json() : null)
+                  .then(meta => {
+                    if (meta) {
+                      if (meta.score) setMalScore(meta.score);
+                      if (meta.kitsuScore) setKitsuScore(meta.kitsuScore);
+                      if (meta.rating) setAgeRating(meta.rating);
+                      if (meta.title && isHanimeMode()) setMalTitle(meta.title);
+                      if (meta.type && !data.Media.format) {
+                        setAnime(prev => prev ? { ...prev, format: meta.type.toUpperCase() } : prev);
                       }
-                    );
-                    if (epData && epData.length > 0) {
-                      setKitsuEpisodes([...epData]);
                     }
+                  })
+                  .catch(() => {});
+
+                // 2. Fetch episode metadata only if AniList streamingEpisodes is insufficient
+                const hasFullAnilistEps = Array.isArray(data.Media.streamingEpisodes) && 
+                  data.Media.streamingEpisodes.length >= Math.min(epCount, 24);
+
+                if (!hasFullAnilistEps) {
+                  try {
+                    const { kitsuClient } = await import('../api/kitsu');
+                    const resolvedKitsuId = await kitsuClient.getKitsuIdByMalId(malId);
+                    if (resolvedKitsuId) {
+                      setKitsuId(resolvedKitsuId);
+                      const epData = await kitsuClient.getEpisodes(
+                        resolvedKitsuId,
+                        priorityRange,
+                        (newEps) => setKitsuEpisodes([...newEps])
+                      );
+                      if (epData && epData.length > 0) {
+                        setKitsuEpisodes([...epData]);
+                      }
+                    } else {
+                      // Fallback to MAL episodes only if Kitsu mapping unavailable
+                      const { malClient } = await import('../api/mal');
+                      const malEpData = await malClient.getEpisodes(
+                        malId,
+                        priorityRange,
+                        (newEps) => setMalEpisodes([...newEps])
+                      );
+                      if (malEpData && malEpData.length > 0) {
+                        setMalEpisodes([...malEpData]);
+                      }
+                    }
+                  } catch (e) {
+                    console.error('Episode fetch error', e);
                   }
-                } catch (e) {
-                  console.error('Failed to fetch Kitsu episodes', e);
                 }
               }
             })
@@ -221,15 +233,21 @@ export default function AnimeDetails() {
   }, [id]);
 
   useEffect(() => {
-    if (isHanimeMode() && anime?.idMal) {
-      fetch(`/api/mal/anime/${anime.idMal}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.title) setMalTitle(data.title);
-        })
-        .catch(console.error);
+    if (kitsuId && episodeRange && episodeRange.includes(' - ')) {
+      const [start, end] = episodeRange.split(' - ').map(Number);
+      if (!isNaN(start) && !isNaN(end)) {
+        import('../api/kitsu').then(({ kitsuClient }) => {
+          kitsuClient.getEpisodes(kitsuId, { start, end }, (newEps) => {
+            setKitsuEpisodes(prev => {
+              const map = new Map(prev.map((e: any) => [e.num, e]));
+              newEps.forEach((e: any) => map.set(e.num, e));
+              return Array.from(map.values()).sort((a: any, b: any) => a.num - b.num);
+            });
+          });
+        });
+      }
     }
-  }, [anime]);
+  }, [kitsuId, episodeRange]);
 
   useEffect(() => {
     if (!loading && anime) {
@@ -476,7 +494,14 @@ export default function AnimeDetails() {
               {title}
             </h1>
             <div className="mb-12">
-              <AnimeInfo anime={anime} hideTitle={true} className="bg-transparent border-none p-0 sm:p-0" />
+              <AnimeInfo
+                anime={anime}
+                hideTitle={true}
+                kitsuScore={kitsuScore}
+                malScore={malScore}
+                ageRating={ageRating}
+                className="bg-transparent border-none p-0 sm:p-0"
+              />
             </div>
             {/* Episodes Section */}
             <div>

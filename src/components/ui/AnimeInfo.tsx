@@ -5,12 +5,28 @@ import { AnimeMedia } from '../../types';
 import { Star, MonitorPlay, Calendar, Clock, PlayCircle, Info } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
-export function AnimeInfo({ anime, className, hideTitle = false }: { anime: AnimeMedia, className?: string, hideTitle?: boolean }) {
+export function AnimeInfo({
+  anime,
+  className,
+  hideTitle = false,
+  kitsuScore: initialKitsuScore,
+  malScore: initialMalScore,
+  ageRating: initialAgeRating
+}: {
+  anime: AnimeMedia;
+  className?: string;
+  hideTitle?: boolean;
+  kitsuScore?: number | null;
+  malScore?: number | null;
+  ageRating?: string | null;
+}) {
   const title = isHanimeMode() ? (anime.title.romaji || anime.title.english) : (anime.title.english || anime.title.romaji);
   
-  const [kitsuScore, setKitsuScore] = useState<number | null>(null);
-  const [malScore, setMalScore] = useState<number | null>(null);
-  const [ageRating, setAgeRating] = useState<string | null>(null);
+  const [kitsuScore, setKitsuScore] = useState<number | null>(initialKitsuScore || null);
+  const [malScore, setMalScore] = useState<number | null>(
+    initialMalScore || (anime.averageScore ? Number((anime.averageScore / 10).toFixed(1)) : null)
+  );
+  const [ageRating, setAgeRating] = useState<string | null>(initialAgeRating || null);
   const [showAllTags, setShowAllTags] = useState(false);
 
   const [tags, setTags] = useState<{ name: string; isMediaSpoiler?: boolean }[]>(() => {
@@ -29,61 +45,38 @@ export function AnimeInfo({ anime, className, hideTitle = false }: { anime: Anim
   }, [anime.tags]);
 
   useEffect(() => {
-    if (anime.idMal) {
-      import('../../api/kitsu').then(({ kitsuClient }) => {
-        kitsuClient.getKitsuIdByMalId(anime.idMal).then(kitsuId => {
-          if (kitsuId) {
-            kitsuClient.getAnime(kitsuId).then(data => {
-              if (data?.attributes?.averageRating) {
-                setKitsuScore(parseFloat(data.attributes.averageRating));
-              }
-              if (data?.attributes?.ageRating) {
-                let rating = data.attributes.ageRating;
-                if (data.attributes.ageRatingGuide) {
-                  rating += ` (${data.attributes.ageRatingGuide})`;
-                }
-                setAgeRating(rating);
-              }
-              if (Array.isArray(data?.included)) {
-                const cats = data.included
-                  .filter((inc: any) => inc.type === 'categories')
-                  .map((inc: any) => ({
-                    name: inc.attributes?.title || inc.attributes?.name,
-                    isMediaSpoiler: false
-                  }))
-                  .filter((t: any) => t.name);
-                if (cats.length > 0) {
-                  setTags(prev => (prev.length === 0 ? cats : prev));
-                }
-              }
-            });
-          }
-        });
-      }).catch(err => console.error("Failed to fetch Kitsu score", err));
+    if (initialKitsuScore !== undefined) setKitsuScore(initialKitsuScore);
+  }, [initialKitsuScore]);
 
-      fetch(`https://api.jikan.moe/v4/anime/${anime.idMal}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data?.data?.score) {
-            setMalScore(data.data.score);
-          }
-          if (data?.data?.rating && !ageRating) {
-            setAgeRating(data.data.rating);
-          }
-          if (data?.data) {
-            const themes = Array.isArray(data.data.themes) ? data.data.themes : [];
-            const demographics = Array.isArray(data.data.demographics) ? data.data.demographics : [];
-            const jikanTags = [...themes, ...demographics]
-              .map((item: any) => ({ name: item.name, isMediaSpoiler: false }))
-              .filter((item: any) => item.name);
-            if (jikanTags.length > 0) {
-              setTags(prev => (prev.length === 0 ? jikanTags : prev));
-            }
-          }
-        })
-        .catch(err => console.error("Failed to fetch MAL score", err));
-    }
-  }, [anime.idMal]);
+  useEffect(() => {
+    if (initialMalScore !== undefined) setMalScore(initialMalScore);
+  }, [initialMalScore]);
+
+  useEffect(() => {
+    if (initialAgeRating !== undefined) setAgeRating(initialAgeRating);
+  }, [initialAgeRating]);
+
+  // Single, safe, cached fetch for supplemental metadata if missing
+  useEffect(() => {
+    if (!anime.idMal) return;
+    if (kitsuScore && malScore && ageRating) return;
+
+    fetch(`/api/mal/anime/${anime.idMal}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (!data) return;
+        if (data.score && !initialMalScore) {
+          setMalScore(data.score);
+        }
+        if (data.kitsuScore && !initialKitsuScore) {
+          setKitsuScore(data.kitsuScore);
+        }
+        if (data.rating && !initialAgeRating) {
+          setAgeRating(data.rating);
+        }
+      })
+      .catch(() => {});
+  }, [anime.idMal, initialKitsuScore, initialMalScore, initialAgeRating]);
 
   const formatFuzzyDate = (date?: { year: number | null; month: number | null; day: number | null }) => {
     if (!date || !date.year) return null;

@@ -62,6 +62,40 @@ function expandRange(range: string): number[] {
   return expandedRange;
 }
 
+// Rate limiter & circuit breaker for Jikan to prevent 429 Too Many Requests
+let jikanCircuitBreakerUntil = 0;
+let lastJikanCallTime = 0;
+
+async function rateLimitedJikanGet(url: string, timeoutMs: number = 3000): Promise<any> {
+  if (Date.now() < jikanCircuitBreakerUntil) {
+    return null;
+  }
+  const now = Date.now();
+  const diff = now - lastJikanCallTime;
+  if (diff < 360) {
+    await new Promise(resolve => setTimeout(resolve, 360 - diff));
+  }
+  lastJikanCallTime = Date.now();
+
+  try {
+    const res = await axios.get(url, {
+      timeout: timeoutMs,
+      validateStatus: () => true,
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+    });
+    if (res.status === 429) {
+      jikanCircuitBreakerUntil = Date.now() + 60000; // 60s circuit breaker on rate limit
+      return null;
+    }
+    if (res.status === 200) {
+      return res;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // -----------------------------------------------------------------------------
 // Health Endpoint
 // -----------------------------------------------------------------------------
@@ -624,11 +658,8 @@ async function synthesizeAnilistFallback(body: any): Promise<any> {
 
     // B. Try Jikan details (extracting themes, demographics, genres)
     try {
-      const jikanRes = await axios.get(`https://api.jikan.moe/v4/anime/${malId}/full`, {
-        timeout: 3500,
-        validateStatus: () => true
-      });
-      if (jikanRes.status === 200 && jikanRes.data?.data) {
+      const jikanRes = await rateLimitedJikanGet(`https://api.jikan.moe/v4/anime/${malId}/full`, 3500);
+      if (jikanRes && jikanRes.status === 200 && jikanRes.data?.data) {
         const d = jikanRes.data.data;
         const jikanGenres = Array.isArray(d.genres) ? d.genres.map((g: any) => g.name) : [];
         const jikanThemesAndDemos = [
@@ -1078,13 +1109,16 @@ app.post("/api/anilist", async (req, res) => {
 
         const isTemporarilyDisabled = json?.errors?.some((e: any) =>
           e?.message?.toLowerCase().includes("temporarily disabled") ||
-          e?.message?.toLowerCase().includes("stability issues")
+          e?.message?.toLowerCase().includes("stability issues") ||
+          e?.message?.toLowerCase().includes("rate limit") ||
+          e?.message?.toLowerCase().includes("too many requests") ||
+          e?.message?.toLowerCase().includes("exceeded")
         );
 
         if (response.ok && json && !isTemporarilyDisabled && json.data) {
           upstreamSuccess = true;
           upstreamData = json;
-        } else if (isTemporarilyDisabled || response.status === 403) {
+        } else if (isTemporarilyDisabled || response.status === 403 || response.status === 429) {
           // Engage circuit breaker for 15 minutes to avoid delay on subsequent queries
           anilistCircuitBreakerUntil = Date.now() + 1000 * 60 * 15;
         }
@@ -1134,6 +1168,9 @@ app.get("/api/mal/anime/:malId", async (req, res) => {
 
     let resolvedType = mapping?.type || 'TV';
     let resolvedTitle = '';
+    let resolvedScore: number | null = null;
+    let resolvedKitsuScore: number | null = null;
+    let resolvedRating: string | null = null;
 
     // 2. Try Kitsu Mapping (instant, reliable, no 504)
     try {
@@ -1146,20 +1183,29 @@ app.get("/api/mal/anime/:malId", async (req, res) => {
         if (item.attributes.subtype) {
           resolvedType = item.attributes.subtype.toUpperCase();
         }
+        if (item.attributes.averageRating) {
+          resolvedKitsuScore = parseFloat(item.attributes.averageRating);
+        }
+        if (item.attributes.ageRating) {
+          let r = item.attributes.ageRating;
+          if (item.attributes.ageRatingGuide) {
+            r += ` (${item.attributes.ageRatingGuide})`;
+          }
+          resolvedRating = r;
+        }
       }
     } catch {}
 
-    // 3. Try Jikan if title still missing
-    if (!resolvedTitle) {
+    // 3. Try Jikan if title, score or rating still missing
+    if (!resolvedTitle || resolvedScore === null || !resolvedRating) {
       try {
-        const jikanRes = await axios.get(`https://api.jikan.moe/v4/anime/${malId}`, {
-          timeout: 2500,
-          validateStatus: () => true
-        });
-        if (jikanRes.status === 200 && jikanRes.data?.data) {
+        const jikanRes = await rateLimitedJikanGet(`https://api.jikan.moe/v4/anime/${malId}`, 2500);
+        if (jikanRes && jikanRes.status === 200 && jikanRes.data?.data) {
           const d = jikanRes.data.data;
-          resolvedTitle = d.title || d.title_english || '';
+          if (!resolvedTitle) resolvedTitle = d.title || d.title_english || '';
           if (d.type) resolvedType = d.type.toUpperCase();
+          if (d.score && resolvedScore === null) resolvedScore = d.score;
+          if (d.rating && !resolvedRating) resolvedRating = d.rating;
         }
       } catch {}
     }
@@ -1185,7 +1231,13 @@ app.get("/api/mal/anime/:malId", async (req, res) => {
       } catch {}
     }
 
-    const result = { type: resolvedType, title: resolvedTitle };
+    const result = {
+      type: resolvedType,
+      title: resolvedTitle,
+      score: resolvedScore,
+      kitsuScore: resolvedKitsuScore,
+      rating: resolvedRating
+    };
     setCached(cacheKey, result, 1000 * 60 * 60 * 12); // 12 hours
     return res.json(result);
   });
@@ -1207,12 +1259,9 @@ app.get("/api/mal/anime/:malId/episodes", async (req, res) => {
     // 1. Try Jikan Episodes API (returns 100 clean episodes)
     try {
       const page = Math.floor(offset / 100) + 1;
-      const jikanRes = await axios.get(`https://api.jikan.moe/v4/anime/${malId}/episodes?page=${page}`, {
-        timeout: 2500,
-        validateStatus: () => true
-      });
+      const jikanRes = await rateLimitedJikanGet(`https://api.jikan.moe/v4/anime/${malId}/episodes?page=${page}`, 2500);
 
-      if (jikanRes.status === 200 && Array.isArray(jikanRes.data?.data) && jikanRes.data.data.length > 0) {
+      if (jikanRes && jikanRes.status === 200 && Array.isArray(jikanRes.data?.data) && jikanRes.data.data.length > 0) {
         const episodes = jikanRes.data.data.map((ep: any) => {
           let airedStr = '';
           if (ep.aired) {
@@ -1256,7 +1305,7 @@ app.get("/api/mal/anime/:malId/episodes", async (req, res) => {
       }
 
       if (kitsuId) {
-        const kitsuEpRes = await axios.get(`https://kitsu.io/api/edge/anime/${kitsuId}/episodes?page[limit]=100&page[offset]=${offset}`, {
+        const kitsuEpRes = await axios.get(`https://kitsu.io/api/edge/anime/${kitsuId}/episodes?page[limit]=20&page[offset]=${offset}`, {
           timeout: 3000
         });
         if (Array.isArray(kitsuEpRes.data?.data) && kitsuEpRes.data.data.length > 0) {

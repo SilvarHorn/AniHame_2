@@ -6,6 +6,15 @@ export interface KitsuEpisode {
   thumbnail?: string;
 }
 
+interface KitsuCacheEntry {
+  status: 'fetching' | 'complete';
+  episodes: KitsuEpisode[];
+  episodesMap: Map<number, KitsuEpisode>;
+  fetchedOffsets: Set<number>;
+  totalCount: number;
+  listeners: ((eps: KitsuEpisode[]) => void)[];
+}
+
 export const kitsuClient = {
   // Returns Kitsu Anime ID mapped from MAL ID
   async getKitsuIdByMalId(malId: number): Promise<string | null> {
@@ -29,134 +38,91 @@ export const kitsuClient = {
     }
   },
 
-  // Returns all episodes for a Kitsu ID, handling pagination in parallel with priority range support
+  // Returns episodes for a Kitsu ID, fetching only the requested priority range
   async getEpisodes(
     kitsuId: string,
     priorityRange?: { start: number; end: number },
     onProgress?: (eps: KitsuEpisode[]) => void
   ): Promise<KitsuEpisode[]> {
     const cacheKey = `episodes-state-${kitsuId}`;
-    let cacheEntry = kitsuCache.get(cacheKey) as { status: 'fetching' | 'complete', episodes: KitsuEpisode[], listeners: any[] } | undefined;
+    let cacheEntry = kitsuCache.get(cacheKey) as KitsuCacheEntry | undefined;
 
-    if (cacheEntry) {
-      if (onProgress && cacheEntry.status === 'fetching') {
-        cacheEntry.listeners.push(onProgress);
+    if (!cacheEntry) {
+      cacheEntry = {
+        status: 'fetching',
+        episodes: [],
+        episodesMap: new Map(),
+        fetchedOffsets: new Set(),
+        totalCount: 0,
+        listeners: onProgress ? [onProgress] : []
+      };
+      kitsuCache.set(cacheKey, cacheEntry);
+    } else if (onProgress) {
+      onProgress(cacheEntry.episodes);
+      cacheEntry.listeners.push(onProgress);
+    }
+
+    const limit = 20; // Kitsu max limit per request
+
+    // Determine target offsets to fetch
+    const targetOffsets: number[] = [];
+    if (priorityRange) {
+      const startOffset = Math.max(0, Math.floor((priorityRange.start - 1) / limit) * limit);
+      const endOffset = Math.max(0, Math.floor((priorityRange.end - 1) / limit) * limit);
+      for (let o = startOffset; o <= endOffset; o += limit) {
+        if (!cacheEntry.fetchedOffsets.has(o)) {
+          targetOffsets.push(o);
+        }
       }
-      if (onProgress) onProgress(cacheEntry.episodes);
+    } else {
+      // Default: fetch first 2 chunks (up to 40 episodes)
+      if (!cacheEntry.fetchedOffsets.has(0)) targetOffsets.push(0);
+      if (!cacheEntry.fetchedOffsets.has(20)) targetOffsets.push(20);
+    }
+
+    if (targetOffsets.length === 0) {
       return cacheEntry.episodes;
     }
 
-    cacheEntry = {
-      status: 'fetching',
-      episodes: [],
-      listeners: onProgress ? [onProgress] : []
-    };
-    kitsuCache.set(cacheKey, cacheEntry);
-
-    const limit = 20; // max limit
-    
     try {
-      const firstOffset = priorityRange ? Math.max(0, Math.floor((priorityRange.start - 1) / limit) * limit) : 0;
-      
-      // 1. Fetch first chunk of priority
-      const firstRes = await fetch(`/api/kitsu/anime/${kitsuId}/episodes?limit=${limit}&offset=${firstOffset}`);
-      if (!firstRes.ok) {
-        cacheEntry.status = 'complete';
-        return cacheEntry.episodes;
-      }
-      const firstData = await firstRes.json();
-      
-      if (!firstData.data || firstData.data.length === 0) {
-        cacheEntry.status = 'complete';
-        return cacheEntry.episodes;
-      }
+      // Fetch in small batches of at most 3 requests to avoid rate limits
+      const chunkSize = 3;
+      for (let i = 0; i < targetOffsets.length; i += chunkSize) {
+        const chunk = targetOffsets.slice(i, i + chunkSize);
+        const results = await Promise.all(
+          chunk.map(async offset => {
+            try {
+              cacheEntry!.fetchedOffsets.add(offset);
+              const res = await fetch(`/api/kitsu/anime/${kitsuId}/episodes?limit=${limit}&offset=${offset}`);
+              if (!res.ok) return null;
+              return await res.json();
+            } catch {
+              return null;
+            }
+          })
+        );
 
-      let episodesData = [...firstData.data];
-      const totalCount = firstData.meta?.count || 0;
-      
-      const updateCacheAndNotify = () => {
-        const episodes: KitsuEpisode[] = [];
-        for (const ep of episodesData) {
-          if (ep.attributes && ep.attributes.number) {
-            episodes.push({
-              num: ep.attributes.number,
-              title: ep.attributes.canonicalTitle || `Episode ${ep.attributes.number}`,
-              thumbnail: ep.attributes.thumbnail?.original
-            });
-          }
-        }
-        episodes.sort((a, b) => a.num - b.num);
-        if (cacheEntry) {
-          cacheEntry.episodes = episodes;
-          cacheEntry.listeners.forEach(fn => fn && fn([...episodes]));
-        }
-      };
-
-      // Notify UI instantly with the first loaded chunk
-      updateCacheAndNotify();
-
-      // 2. Calculate remaining chunks
-      const totalPages = Math.ceil(totalCount / limit);
-      const allOffsets = Array.from({ length: totalPages }, (_, i) => i * limit);
-      const remainingAllOffsets = allOffsets.filter(o => o !== firstOffset);
-
-      const priorityOffsets: number[] = [];
-      const backgroundOffsets: number[] = [];
-
-      if (priorityRange) {
-        for (const offset of remainingAllOffsets) {
-          const pageStart = offset + 1;
-          const pageEnd = offset + limit;
-          if (pageStart <= priorityRange.end && pageEnd >= priorityRange.start) {
-            priorityOffsets.push(offset);
-          } else {
-            backgroundOffsets.push(offset);
-          }
-        }
-      } else {
-        priorityOffsets.push(...remainingAllOffsets);
-      }
-
-      const fetchOffsets = async (offsets: number[]) => {
-        const chunkSize = 5;
-        for (let i = 0; i < offsets.length; i += chunkSize) {
-          const chunk = offsets.slice(i, i + chunkSize);
-          const results = await Promise.all(chunk.map(offset => 
-            fetch(`/api/kitsu/anime/${kitsuId}/episodes?limit=${limit}&offset=${offset}`)
-              .then(res => res.ok ? res.json() : null)
-              .catch(() => null)
-          ));
-          
-          for (const res of results) {
-            if (res && res.data) {
-              episodesData = episodesData.concat(res.data);
+        for (const res of results) {
+          if (res?.data && Array.isArray(res.data)) {
+            for (const ep of res.data) {
+              const num = ep.attributes?.number;
+              if (num && !cacheEntry.episodesMap.has(num)) {
+                const item: KitsuEpisode = {
+                  num,
+                  title: ep.attributes?.canonicalTitle || `Episode ${num}`,
+                  thumbnail: ep.attributes?.thumbnail?.original
+                };
+                cacheEntry.episodesMap.set(num, item);
+              }
             }
           }
         }
-      };
 
-      // 3. Fetch the rest of the priority chunk first (blocks return so UI gets it fast)
-      if (priorityOffsets.length > 0) {
-        await fetchOffsets(priorityOffsets);
-        updateCacheAndNotify();
+        cacheEntry.episodes = Array.from(cacheEntry.episodesMap.values()).sort((a, b) => a.num - b.num);
+        cacheEntry.listeners.forEach(fn => fn && fn([...cacheEntry!.episodes]));
       }
 
-      // 4. Fetch background chunks silently without blocking
-      if (backgroundOffsets.length > 0) {
-        fetchOffsets(backgroundOffsets).then(() => {
-          updateCacheAndNotify();
-          if (cacheEntry) {
-            cacheEntry.status = 'complete';
-            cacheEntry.listeners = []; // Cleanup memory
-          }
-        });
-      } else {
-        if (cacheEntry) {
-          cacheEntry.status = 'complete';
-          cacheEntry.listeners = [];
-        }
-      }
-
+      cacheEntry.status = 'complete';
       return cacheEntry.episodes;
     } catch (e) {
       console.error('Kitsu episodes error', e);
