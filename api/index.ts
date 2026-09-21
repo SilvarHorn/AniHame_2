@@ -605,9 +605,31 @@ async function synthesizeAnilistFallback(body: any): Promise<any> {
     }
 
     let kitsuId = mapping?.kitsu_id;
-    let malId = mapping?.mal_id || rawId;
+    let malId = mapping?.mal_id || null;
 
-    // A. Try Kitsu Details (high reliability, full tags and categories)
+    // A. If kitsuId is missing, resolve via Kitsu mappings endpoint
+    if (!kitsuId) {
+      try {
+        const aniMapRes = await axios.get(
+          `https://kitsu.io/api/edge/mappings?filter[externalSite]=anilist/anime&filter[externalId]=${rawId}&include=item`,
+          {
+            timeout: 2500,
+            headers: { "Accept": "application/vnd.api+json" }
+          }
+        );
+        const mappedItem = aniMapRes.data?.included?.[0];
+        if (mappedItem?.id) {
+          kitsuId = parseInt(mappedItem.id, 10);
+        }
+      } catch {}
+    }
+
+    // If still not found and rawId could be a direct kitsuId or malId
+    if (!kitsuId && !malId) {
+      kitsuId = rawId;
+    }
+
+    // B. Try Kitsu Details (high reliability, full tags and categories)
     try {
       let kitsuUrl = kitsuId ? `https://kitsu.io/api/edge/anime/${kitsuId}?include=categories,genres` : null;
 
@@ -644,7 +666,7 @@ async function synthesizeAnilistFallback(body: any): Promise<any> {
           const media = mapKitsuToAniListMedia(item);
           if (media) {
             media.id = rawId;
-            media.idMal = malId;
+            if (malId) media.idMal = malId;
             if (finalGenres.length > 0) media.genres = finalGenres;
             if (finalTags.length > 0) media.tags = finalTags;
             if (nextAiringEpisode) {
@@ -656,57 +678,106 @@ async function synthesizeAnilistFallback(body: any): Promise<any> {
       }
     } catch {}
 
-    // B. Try Jikan details (extracting themes, demographics, genres)
-    try {
-      const jikanRes = await rateLimitedJikanGet(`https://api.jikan.moe/v4/anime/${malId}/full`, 3500);
-      if (jikanRes && jikanRes.status === 200 && jikanRes.data?.data) {
-        const d = jikanRes.data.data;
-        const jikanGenres = Array.isArray(d.genres) ? d.genres.map((g: any) => g.name) : [];
-        const jikanThemesAndDemos = [
-          ...(Array.isArray(d.themes) ? d.themes.map((t: any) => t.name) : []),
-          ...(Array.isArray(d.demographics) ? d.demographics.map((dm: any) => dm.name) : []),
-          ...(Array.isArray(d.explicit_genres) ? d.explicit_genres.map((eg: any) => eg.name) : [])
-        ];
-        const { genres: finalGenres, tags: finalTags } = extractGenresAndTags(jikanGenres, jikanThemesAndDemos);
-        const media = {
-          id: rawId,
-          idMal: malId,
-          type: "ANIME",
-          format: d.type ? d.type.toUpperCase() : "TV",
-          title: {
-            romaji: d.title || d.title_english || "Unknown",
-            english: d.title_english || d.title || "Unknown",
-            native: d.title_japanese || d.title || "Unknown"
-          },
-          coverImage: {
-            extraLarge: d.images?.webp?.large_image_url || d.images?.jpg?.large_image_url || "",
-            large: d.images?.jpg?.large_image_url || "",
-            medium: d.images?.jpg?.small_image_url || ""
-          },
-          bannerImage: d.images?.jpg?.large_image_url || null,
-          averageScore: d.score ? Math.round(d.score * 10) : 80,
-          isAdult: Boolean(d.rating?.includes("Rx") || d.rating?.includes("Hentai")),
-          description: d.synopsis || "",
-          episodes: d.episodes || null,
-          status: d.airing ? "RELEASING" : "FINISHED",
-          genres: finalGenres,
-          tags: finalTags,
-          studios: {
-            edges: Array.isArray(d.studios) ? d.studios.map((s: any) => ({ isMain: true, node: { name: s.name } })) : []
-          },
-          trailer: d.trailer?.youtube_id ? {
-            id: d.trailer.youtube_id,
-            site: "youtube",
-            thumbnail: d.trailer.images?.maximum_image_url || d.trailer.images?.large_image_url || ""
-          } : null,
-          relations: { edges: [] },
-          nextAiringEpisode
-        };
-        return { data: { Media: media } };
-      }
-    } catch {}
+    // C. Try Jikan details if malId is available (extracting themes, demographics, genres, relations)
+    if (malId) {
+      try {
+        const jikanRes = await rateLimitedJikanGet(`https://api.jikan.moe/v4/anime/${malId}/full`, 3500);
+        if (jikanRes && jikanRes.status === 200 && jikanRes.data?.data) {
+          const d = jikanRes.data.data;
+          const jikanGenres = Array.isArray(d.genres) ? d.genres.map((g: any) => g.name) : [];
+          const jikanThemesAndDemos = [
+            ...(Array.isArray(d.themes) ? d.themes.map((t: any) => t.name) : []),
+            ...(Array.isArray(d.demographics) ? d.demographics.map((dm: any) => dm.name) : []),
+            ...(Array.isArray(d.explicit_genres) ? d.explicit_genres.map((eg: any) => eg.name) : [])
+          ];
+          const { genres: finalGenres, tags: finalTags } = extractGenresAndTags(jikanGenres, jikanThemesAndDemos);
 
-    // C. Fallback to AniSchedule dataset
+          const relationEdges: any[] = [];
+          if (Array.isArray(d.relations)) {
+            for (const rel of d.relations) {
+              const relType = (rel.relation || 'OTHER').toUpperCase();
+              if (Array.isArray(rel.entry)) {
+                for (const entry of rel.entry) {
+                  if (entry.type === 'anime' && entry.mal_id) {
+                    const mappedAni = malToMapping.get(entry.mal_id)?.anilist_id || entry.mal_id;
+                    relationEdges.push({
+                      relationType: relType,
+                      node: {
+                        id: mappedAni,
+                        idMal: entry.mal_id,
+                        type: 'ANIME',
+                        format: 'TV',
+                        title: {
+                          romaji: entry.name,
+                          english: entry.name
+                        },
+                        coverImage: {
+                          extraLarge: '',
+                          large: '',
+                          medium: ''
+                        },
+                        bannerImage: null,
+                        averageScore: 80,
+                        isAdult: false,
+                        description: '',
+                        episodes: null,
+                        status: 'FINISHED',
+                        genres: [],
+                        tags: [],
+                        relations: { edges: [] }
+                      }
+                    });
+                  }
+                }
+              }
+            }
+          }
+
+          const media = {
+            id: rawId,
+            idMal: malId,
+            type: "ANIME",
+            format: d.type ? d.type.toUpperCase() : "TV",
+            title: {
+              romaji: d.title || d.title_english || "Unknown",
+              english: d.title_english || d.title || "Unknown",
+              native: d.title_japanese || d.title || "Unknown"
+            },
+            coverImage: {
+              extraLarge: d.images?.webp?.large_image_url || d.images?.jpg?.large_image_url || "",
+              large: d.images?.jpg?.large_image_url || "",
+              medium: d.images?.jpg?.small_image_url || ""
+            },
+            bannerImage: d.images?.jpg?.large_image_url || null,
+            averageScore: d.score ? Math.round(d.score * 10) : 80,
+            isAdult: Boolean(d.rating?.includes("Rx") || d.rating?.includes("Hentai")),
+            description: d.synopsis || "",
+            episodes: d.episodes || null,
+            status: d.airing ? "RELEASING" : "FINISHED",
+            genres: finalGenres,
+            tags: finalTags,
+            studios: {
+              edges: Array.isArray(d.studios) ? d.studios.map((s: any) => ({ isMain: true, node: { name: s.name } })) : []
+            },
+            trailer: d.trailer?.youtube_id ? {
+              id: d.trailer.youtube_id,
+              site: "youtube",
+              thumbnail: d.trailer.images?.maximum_image_url || d.trailer.images?.large_image_url || ""
+            } : null,
+            relations: { edges: relationEdges },
+            nextAiringEpisode
+          };
+          return { data: { Media: media } };
+        }
+      } catch {}
+    }
+
+    // D. Fallback to catalog or AniSchedule dataset
+    const inCatalog = popularAnimeCatalog.find(a => a.id === rawId || a.idMal === rawId);
+    if (inCatalog) {
+      return { data: { Media: inCatalog } };
+    }
+
     if (scheduled) {
       const media = mapScheduleItemToAniListMedia(scheduled);
       if (media) return { data: { Media: media } };
@@ -887,6 +958,42 @@ async function synthesizeAnilistFallback(body: any): Promise<any> {
       const seenIds = new Set<number>();
       const seenTitles = new Set<string>();
       const pool: any[] = [];
+
+      // If text search query is provided, query Kitsu search API live for comprehensive results
+      if (variables.search && String(variables.search).trim()) {
+        const q = String(variables.search).trim();
+        try {
+          const kitsuSearchRes = await axios.get(
+            `https://kitsu.io/api/edge/anime?filter[text]=${encodeURIComponent(q)}&page[limit]=20&include=genres,categories`,
+            {
+              headers: { "Accept": "application/vnd.api+json", "User-Agent": "Mozilla/5.0" },
+              timeout: 3000
+            }
+          );
+          if (Array.isArray(kitsuSearchRes.data?.data)) {
+            const included = Array.isArray(kitsuSearchRes.data.included) ? kitsuSearchRes.data.included : [];
+            const genreMap = new Map<string, string>();
+            const categoryMap = new Map<string, string>();
+            for (const inc of included) {
+              if (inc.type === 'genres' && inc.attributes?.name) {
+                genreMap.set(String(inc.id), inc.attributes.name);
+              } else if (inc.type === 'categories' && (inc.attributes?.title || inc.attributes?.name)) {
+                categoryMap.set(String(inc.id), inc.attributes.title || inc.attributes.name);
+              }
+            }
+
+            for (const item of kitsuSearchRes.data.data) {
+              const mapped = mapKitsuToAniListMedia(item, genreMap, categoryMap);
+              if (mapped && !seenIds.has(mapped.id)) {
+                seenIds.add(mapped.id);
+                const titleKey = (mapped.title?.english || mapped.title?.romaji || '').toLowerCase().trim();
+                if (titleKey) seenTitles.add(titleKey);
+                pool.push(mapped);
+              }
+            }
+          }
+        } catch {}
+      }
 
       for (const anime of [...catalog, ...scheduleMedia]) {
         if (!anime || !anime.id) continue;
@@ -1075,6 +1182,48 @@ async function synthesizeAnilistFallback(body: any): Promise<any> {
 // -----------------------------------------------------------------------------
 let anilistCircuitBreakerUntil = 0;
 
+// Proactive background probe to track upstream health without stalling client requests
+async function probeAnilistUpstream() {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2000);
+    const response = await fetch('https://graphql.anilist.co', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      },
+      body: JSON.stringify({ query: '{ Page(page: 1, perPage: 1) { media(sort: ID) { id } } }' }),
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+
+    const text = await response.text();
+    let json: any = null;
+    try { json = JSON.parse(text); } catch {}
+
+    const isTemporarilyDisabled = !response.ok || json?.errors?.some((e: any) =>
+      e?.message?.toLowerCase().includes("temporarily disabled") ||
+      e?.message?.toLowerCase().includes("stability issues") ||
+      e?.message?.toLowerCase().includes("rate limit") ||
+      e?.status === 403
+    );
+
+    if (isTemporarilyDisabled) {
+      anilistCircuitBreakerUntil = Date.now() + 1000 * 60 * 30; // 30 minutes
+    } else if (json?.data) {
+      anilistCircuitBreakerUntil = 0; // upstream is healthy
+    }
+  } catch {
+    anilistCircuitBreakerUntil = Date.now() + 1000 * 60 * 15;
+  }
+}
+
+// Probe upstream at boot and periodically every 15 minutes
+probeAnilistUpstream().catch(() => {});
+setInterval(() => probeAnilistUpstream().catch(() => {}), 1000 * 60 * 15);
+
 app.post("/api/anilist", async (req, res) => {
   const cacheKey = `anilist_${JSON.stringify(req.body)}`;
   const cached = getCached(cacheKey);
@@ -1082,69 +1231,82 @@ app.post("/api/anilist", async (req, res) => {
     return res.status(200).json(cached);
   }
 
-  return coalesce(cacheKey, async () => {
-    // 1. Try official AniList upstream only if circuit breaker is not active
-    let upstreamSuccess = false;
-    let upstreamData: any = null;
+  try {
+    const result = await coalesce(cacheKey, async () => {
+      // 1. Try official AniList upstream only if circuit breaker is not active
+      let upstreamSuccess = false;
+      let upstreamData: any = null;
 
-    if (Date.now() > anilistCircuitBreakerUntil) {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 1800);
+      if (Date.now() > anilistCircuitBreakerUntil) {
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 1500);
 
-        const response = await fetch('https://graphql.anilist.co', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-          },
-          body: JSON.stringify(req.body),
-          signal: controller.signal
-        });
-        clearTimeout(timeout);
+          const response = await fetch('https://graphql.anilist.co', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            },
+            body: JSON.stringify(req.body),
+            signal: controller.signal
+          });
+          clearTimeout(timeout);
 
-        const text = await response.text();
-        const json = JSON.parse(text);
+          const text = await response.text();
+          let json: any = null;
+          try { json = JSON.parse(text); } catch {}
 
-        const isTemporarilyDisabled = json?.errors?.some((e: any) =>
-          e?.message?.toLowerCase().includes("temporarily disabled") ||
-          e?.message?.toLowerCase().includes("stability issues") ||
-          e?.message?.toLowerCase().includes("rate limit") ||
-          e?.message?.toLowerCase().includes("too many requests") ||
-          e?.message?.toLowerCase().includes("exceeded")
-        );
+          const isTemporarilyDisabled = !response.ok || json?.errors?.some((e: any) =>
+            e?.message?.toLowerCase().includes("temporarily disabled") ||
+            e?.message?.toLowerCase().includes("stability issues") ||
+            e?.message?.toLowerCase().includes("rate limit") ||
+            e?.message?.toLowerCase().includes("too many requests") ||
+            e?.message?.toLowerCase().includes("exceeded") ||
+            e?.status === 403
+          );
 
-        if (response.ok && json && !isTemporarilyDisabled && json.data) {
-          upstreamSuccess = true;
-          upstreamData = json;
-        } else if (isTemporarilyDisabled || response.status === 403 || response.status === 429) {
-          // Engage circuit breaker for 15 minutes to avoid delay on subsequent queries
-          anilistCircuitBreakerUntil = Date.now() + 1000 * 60 * 15;
+          if (response.ok && json && !isTemporarilyDisabled && json.data) {
+            upstreamSuccess = true;
+            upstreamData = json;
+          } else {
+            // Upstream failed or returned disabled/rate-limit error: engage circuit breaker for 30 minutes
+            anilistCircuitBreakerUntil = Date.now() + 1000 * 60 * 30;
+          }
+        } catch {
+          // Network timeout or error
+          anilistCircuitBreakerUntil = Date.now() + 1000 * 60 * 5;
         }
-      } catch {
-        // Network timeout or error
       }
-    }
 
-    if (upstreamSuccess && upstreamData) {
-      setCached(cacheKey, upstreamData, 1000 * 60 * 20); // 20 mins
-      return res.status(200).json(upstreamData);
-    }
-
-    // 2. Synthesize via Fallback Engine (Zero downtime)
-    try {
-      const fallbackResult = await synthesizeAnilistFallback(req.body);
-      if (fallbackResult && fallbackResult.data) {
-        setCached(cacheKey, fallbackResult, 1000 * 60 * 30); // 30 mins
-        return res.status(200).json(fallbackResult);
+      if (upstreamSuccess && upstreamData) {
+        setCached(cacheKey, upstreamData, 1000 * 60 * 20); // 20 mins
+        return upstreamData;
       }
-    } catch (fallbackErr: any) {
-      console.error("AniList fallback error:", fallbackErr?.message || fallbackErr);
-    }
 
+      // 2. Synthesize via Universal Fallback Engine (Zero downtime)
+      try {
+        const fallbackResult = await synthesizeAnilistFallback(req.body);
+        if (fallbackResult && fallbackResult.data) {
+          setCached(cacheKey, fallbackResult, 1000 * 60 * 30); // 30 mins
+          return fallbackResult;
+        }
+      } catch (fallbackErr: any) {
+        console.error("AniList fallback error:", fallbackErr?.message || fallbackErr);
+      }
+
+      return null;
+    });
+
+    if (result) {
+      return res.status(200).json(result);
+    }
     return res.status(500).json({ error: "AniList API temporarily unavailable" });
-  });
+  } catch (err: any) {
+    console.error("AniList route error:", err?.message || err);
+    return res.status(500).json({ error: "AniList API error" });
+  }
 });
 
 // -----------------------------------------------------------------------------
@@ -1158,89 +1320,107 @@ app.get("/api/mal/anime/:malId", async (req, res) => {
   const cached = getCached(cacheKey);
   if (cached) return res.json(cached);
 
-  return coalesce(cacheKey, async () => {
-    // 1. Instant Map Lookup
-    let mapping = malToMapping.get(malId);
-    if (!mapping && malToMapping.size === 0) {
-      await preloadAnimeMappings();
-      mapping = malToMapping.get(malId);
-    }
-
-    let resolvedType = mapping?.type || 'TV';
-    let resolvedTitle = '';
-    let resolvedScore: number | null = null;
-    let resolvedKitsuScore: number | null = null;
-    let resolvedRating: string | null = null;
-
-    // 2. Try Kitsu Mapping (instant, reliable, no 504)
-    try {
-      const kitsuRes = await axios.get(`https://kitsu.io/api/edge/mappings?filter[externalSite]=myanimelist/anime&filter[externalId]=${malId}&include=item`, {
-        timeout: 3000
-      });
-      const item = kitsuRes.data?.included?.[0];
-      if (item && item.attributes) {
-        resolvedTitle = item.attributes.canonicalTitle || item.attributes.titles?.en || '';
-        if (item.attributes.subtype) {
-          resolvedType = item.attributes.subtype.toUpperCase();
-        }
-        if (item.attributes.averageRating) {
-          resolvedKitsuScore = parseFloat(item.attributes.averageRating);
-        }
-        if (item.attributes.ageRating) {
-          let r = item.attributes.ageRating;
-          if (item.attributes.ageRatingGuide) {
-            r += ` (${item.attributes.ageRatingGuide})`;
-          }
-          resolvedRating = r;
-        }
+  try {
+    const result = await coalesce(cacheKey, async () => {
+      // 1. Instant Map Lookup
+      let mapping = malToMapping.get(malId);
+      if (!mapping && malToMapping.size === 0) {
+        await preloadAnimeMappings();
+        mapping = malToMapping.get(malId);
       }
-    } catch {}
 
-    // 3. Try Jikan if title, score or rating still missing
-    if (!resolvedTitle || resolvedScore === null || !resolvedRating) {
-      try {
-        const jikanRes = await rateLimitedJikanGet(`https://api.jikan.moe/v4/anime/${malId}`, 2500);
-        if (jikanRes && jikanRes.status === 200 && jikanRes.data?.data) {
-          const d = jikanRes.data.data;
-          if (!resolvedTitle) resolvedTitle = d.title || d.title_english || '';
-          if (d.type) resolvedType = d.type.toUpperCase();
-          if (d.score && resolvedScore === null) resolvedScore = d.score;
-          if (d.rating && !resolvedRating) resolvedRating = d.rating;
-        }
-      } catch {}
-    }
+      let resolvedType = mapping?.type || 'TV';
+      let resolvedTitle = '';
+      let resolvedScore: number | null = null;
+      let resolvedKitsuScore: number | null = null;
+      let resolvedRating: string | null = null;
+      let resolvedTags: any[] = [];
 
-    // 4. Try MAL Scrape fallback if needed
-    if (!resolvedTitle) {
+      // 2. Try Kitsu Mapping (instant, reliable, no 504)
       try {
-        const malRes = await axios.get(`https://myanimelist.net/anime/${malId}`, {
-          timeout: 4000,
-          validateStatus: () => true,
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+        const kitsuRes = await axios.get(`https://kitsu.io/api/edge/mappings?filter[externalSite]=myanimelist/anime&filter[externalId]=${malId}&include=item,item.categories`, {
+          timeout: 3000
         });
-        if (malRes.status === 200) {
-          const $ = cheerio.load(malRes.data);
-          resolvedTitle = $('meta[property="og:title"]').attr('content') || $('h1.title-name strong').text().trim();
-          $('div.spaceit_pad').each((_, el) => {
-            const text = $(el).text();
-            if (text.includes('Type:')) {
-              resolvedType = $(el).find('a').text().trim() || text.replace('Type:', '').trim();
+        const item = kitsuRes.data?.included?.find((x: any) => x.type === 'anime') || kitsuRes.data?.included?.[0];
+        if (item && item.attributes) {
+          resolvedTitle = item.attributes.canonicalTitle || item.attributes.titles?.en || '';
+          if (item.attributes.subtype) {
+            resolvedType = item.attributes.subtype.toUpperCase();
+          }
+          if (item.attributes.averageRating) {
+            resolvedKitsuScore = parseFloat(item.attributes.averageRating);
+          }
+          if (item.attributes.ageRating) {
+            let r = item.attributes.ageRating;
+            if (item.attributes.ageRatingGuide) {
+              r += ` (${item.attributes.ageRatingGuide})`;
             }
-          });
+            resolvedRating = r;
+          }
+        }
+        const categories = kitsuRes.data?.included?.filter((x: any) => x.type === 'categories') || [];
+        if (categories.length > 0) {
+          resolvedTags = categories.map((c: any) => ({
+            name: c.attributes?.title || c.attributes?.name,
+            isMediaSpoiler: false
+          })).filter((t: any) => Boolean(t.name));
         }
       } catch {}
-    }
 
-    const result = {
-      type: resolvedType,
-      title: resolvedTitle,
-      score: resolvedScore,
-      kitsuScore: resolvedKitsuScore,
-      rating: resolvedRating
-    };
-    setCached(cacheKey, result, 1000 * 60 * 60 * 12); // 12 hours
+      // 3. Try Jikan if title, score or rating still missing
+      if (!resolvedTitle || resolvedScore === null || !resolvedRating) {
+        try {
+          const jikanRes = await rateLimitedJikanGet(`https://api.jikan.moe/v4/anime/${malId}`, 2500);
+          if (jikanRes && jikanRes.status === 200 && jikanRes.data?.data) {
+            const d = jikanRes.data.data;
+            if (!resolvedTitle) resolvedTitle = d.title || d.title_english || '';
+            if (d.type) resolvedType = d.type.toUpperCase();
+            if (d.score && resolvedScore === null) resolvedScore = d.score;
+            if (d.rating && !resolvedRating) resolvedRating = d.rating;
+            if (resolvedTags.length === 0 && Array.isArray(d.themes)) {
+              resolvedTags = d.themes.map((t: any) => ({ name: t.name, isMediaSpoiler: false }));
+            }
+          }
+        } catch {}
+      }
+
+      // 4. Try MAL Scrape fallback if needed
+      if (!resolvedTitle) {
+        try {
+          const malRes = await axios.get(`https://myanimelist.net/anime/${malId}`, {
+            timeout: 4000,
+            validateStatus: () => true,
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+          });
+          if (malRes.status === 200) {
+            const $ = cheerio.load(malRes.data);
+            resolvedTitle = $('meta[property="og:title"]').attr('content') || $('h1.title-name strong').text().trim();
+            $('div.spaceit_pad').each((_, el) => {
+              const text = $(el).text();
+              if (text.includes('Type:')) {
+                resolvedType = $(el).find('a').text().trim() || text.replace('Type:', '').trim();
+              }
+            });
+          }
+        } catch {}
+      }
+
+      const result = {
+        type: resolvedType,
+        title: resolvedTitle,
+        score: resolvedScore,
+        kitsuScore: resolvedKitsuScore,
+        rating: resolvedRating,
+        tags: resolvedTags
+      };
+      setCached(cacheKey, result, 1000 * 60 * 60 * 12); // 12 hours
+      return result;
+    });
+
     return res.json(result);
-  });
+  } catch (err: any) {
+    return res.status(500).json({ error: "Failed to fetch MAL metadata" });
+  }
 });
 
 // -----------------------------------------------------------------------------
@@ -1255,128 +1435,135 @@ app.get("/api/mal/anime/:malId/episodes", async (req, res) => {
   const cached = getCached(cacheKey);
   if (cached) return res.json(cached);
 
-  return coalesce(cacheKey, async () => {
-    // 1. Try Jikan Episodes API (returns 100 clean episodes)
-    try {
-      const page = Math.floor(offset / 100) + 1;
-      const jikanRes = await rateLimitedJikanGet(`https://api.jikan.moe/v4/anime/${malId}/episodes?page=${page}`, 2500);
+  try {
+    const result = await coalesce(cacheKey, async () => {
+      // 1. Try Jikan Episodes API (returns 100 clean episodes)
+      try {
+        const page = Math.floor(offset / 100) + 1;
+        const jikanRes = await rateLimitedJikanGet(`https://api.jikan.moe/v4/anime/${malId}/episodes?page=${page}`, 4500);
 
-      if (jikanRes && jikanRes.status === 200 && Array.isArray(jikanRes.data?.data) && jikanRes.data.data.length > 0) {
-        const episodes = jikanRes.data.data.map((ep: any) => {
-          let airedStr = '';
-          if (ep.aired) {
-            try {
-              airedStr = new Date(ep.aired).toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                year: 'numeric'
-              });
-            } catch {
-              airedStr = ep.aired;
-            }
-          }
-          return {
-            num: ep.mal_id,
-            title: ep.title || ep.title_romanji || `Episode ${ep.mal_id}`,
-            aired: airedStr
-          };
-        });
-
-        const result = { episodes };
-        setCached(cacheKey, result, 1000 * 60 * 60 * 4); // 4 hours
-        return res.json(result);
-      }
-    } catch {}
-
-    // 2. Try Kitsu Episodes fallback
-    try {
-      let mapping = malToMapping.get(malId);
-      if (!mapping && malToMapping.size === 0) {
-        await preloadAnimeMappings();
-        mapping = malToMapping.get(malId);
-      }
-
-      let kitsuId = mapping?.kitsu_id;
-      if (!kitsuId) {
-        const kitsuMapRes = await axios.get(`https://kitsu.io/api/edge/mappings?filter[externalSite]=myanimelist/anime&filter[externalId]=${malId}&include=item`, {
-          timeout: 3000
-        });
-        kitsuId = kitsuMapRes.data?.included?.[0]?.id;
-      }
-
-      if (kitsuId) {
-        const kitsuEpRes = await axios.get(`https://kitsu.io/api/edge/anime/${kitsuId}/episodes?page[limit]=20&page[offset]=${offset}`, {
-          timeout: 3000
-        });
-        if (Array.isArray(kitsuEpRes.data?.data) && kitsuEpRes.data.data.length > 0) {
-          const episodes = kitsuEpRes.data.data.map((item: any) => {
-            const attr = item.attributes;
+        if (jikanRes && jikanRes.status === 200 && Array.isArray(jikanRes.data?.data) && jikanRes.data.data.length > 0) {
+          const episodes = jikanRes.data.data.map((ep: any) => {
             let airedStr = '';
-            if (attr.airdate) {
+            if (ep.aired) {
               try {
-                airedStr = new Date(attr.airdate).toLocaleDateString('en-US', {
+                airedStr = new Date(ep.aired).toLocaleDateString('en-US', {
                   month: 'short',
                   day: 'numeric',
-                  year: 'numeric'
+                  year: 'numeric',
+                  timeZone: 'UTC'
                 });
               } catch {
-                airedStr = attr.airdate;
+                airedStr = ep.aired;
               }
             }
             return {
-              num: attr.number || 1,
-              title: attr.canonicalTitle || `Episode ${attr.number || 1}`,
+              num: ep.mal_id,
+              title: ep.title || ep.title_romanji || `Episode ${ep.mal_id}`,
               aired: airedStr
             };
           });
 
           const result = { episodes };
-          setCached(cacheKey, result, 1000 * 60 * 60 * 4);
-          return res.json(result);
+          setCached(cacheKey, result, 1000 * 60 * 60 * 4); // 4 hours
+          return result;
         }
-      }
-    } catch {}
+      } catch {}
 
-    // 3. Fallback to HTML Scraping
-    const url = `https://myanimelist.net/anime/${malId}/a/episode?offset=${offset}`;
-    try {
-      const response = await axios.get(url, {
-        timeout: 4500,
-        validateStatus: () => true,
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
-      });
+      // 2. Try Kitsu Episodes fallback
+      try {
+        let mapping = malToMapping.get(malId);
+        if (!mapping && malToMapping.size === 0) {
+          await preloadAnimeMappings();
+          mapping = malToMapping.get(malId);
+        }
 
-      if (response.status === 200) {
-        const html = response.data;
-        const $ = cheerio.load(html);
-        const episodes: any[] = [];
+        let kitsuId = mapping?.kitsu_id;
+        if (!kitsuId) {
+          const kitsuMapRes = await axios.get(`https://kitsu.io/api/edge/mappings?filter[externalSite]=myanimelist/anime&filter[externalId]=${malId}&include=item`, {
+            timeout: 3000
+          });
+          kitsuId = kitsuMapRes.data?.included?.[0]?.id;
+        }
 
-        $('table.episode_list tbody tr.episode-list-data').each((_, element) => {
-          const epNum = $(element).find('td.episode-number').text().trim();
-          const title = $(element).find('td.episode-title a.fl-l.fw-b').text().trim();
-          const aired = $(element).find('td.episode-aired').text().trim();
-
-          if (epNum && title) {
-            episodes.push({
-              num: parseInt(epNum, 10),
-              title: title,
-              aired: aired === 'N/A' ? '' : aired
+        if (kitsuId) {
+          const kitsuEpRes = await axios.get(`https://kitsu.io/api/edge/anime/${kitsuId}/episodes?page[limit]=20&page[offset]=${offset}`, {
+            timeout: 3000
+          });
+          if (Array.isArray(kitsuEpRes.data?.data) && kitsuEpRes.data.data.length > 0) {
+            const episodes = kitsuEpRes.data.data.map((item: any) => {
+              const attr = item.attributes;
+              let airedStr = '';
+              if (attr.airdate) {
+                try {
+                  airedStr = new Date(attr.airdate).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric'
+                  });
+                } catch {
+                  airedStr = attr.airdate;
+                }
+              }
+              return {
+                num: attr.number || 1,
+                title: attr.canonicalTitle || `Episode ${attr.number || 1}`,
+                aired: airedStr
+              };
             });
+
+            const result = { episodes };
+            setCached(cacheKey, result, 1000 * 60 * 60 * 4);
+            return result;
           }
+        }
+      } catch {}
+
+      // 3. Fallback to HTML Scraping
+      const url = `https://myanimelist.net/anime/${malId}/a/episode?offset=${offset}`;
+      try {
+        const response = await axios.get(url, {
+          timeout: 4500,
+          validateStatus: () => true,
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
         });
 
-        const result = { episodes };
-        setCached(cacheKey, result, 1000 * 60 * 60 * 2);
-        return res.json(result);
-      }
-    } catch (error) {
-      console.warn("MAL Scrape Error (Episodes):", error);
-    }
+        if (response.status === 200) {
+          const html = response.data;
+          const $ = cheerio.load(html);
+          const episodes: any[] = [];
 
-    const empty = { episodes: [] };
-    setCached(cacheKey, empty, 1000 * 60 * 10);
-    return res.json(empty);
-  });
+          $('table.episode_list tbody tr.episode-list-data').each((_, element) => {
+            const epNum = $(element).find('td.episode-number').text().trim();
+            const title = $(element).find('td.episode-title a.fl-l.fw-b').text().trim();
+            const aired = $(element).find('td.episode-aired').text().trim();
+
+            if (epNum && title) {
+              episodes.push({
+                num: parseInt(epNum, 10),
+                title: title,
+                aired: aired === 'N/A' ? '' : aired
+              });
+            }
+          });
+
+          const result = { episodes };
+          setCached(cacheKey, result, 1000 * 60 * 60 * 2);
+          return result;
+        }
+      } catch (error) {
+        console.warn("MAL Scrape Error (Episodes):", error);
+      }
+
+      const empty = { episodes: [] };
+      setCached(cacheKey, empty, 1000 * 60 * 10);
+      return empty;
+    });
+
+    return res.json(result);
+  } catch (err: any) {
+    return res.status(500).json({ episodes: [] });
+  }
 });
 
 // -----------------------------------------------------------------------------

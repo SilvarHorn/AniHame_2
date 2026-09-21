@@ -39,6 +39,8 @@ export default function Watch() {
   const manualServerChoiceRef = useRef<WatchServerType | null>(null);
   const [imdbId, setImdbId] = useState<string | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [malId, setMalId] = useState<number | null>(null);
+  const [kitsuId, setKitsuId] = useState<string | null>(null);
   const [kitsuEpisodes, setKitsuEpisodes] = useState<any[]>([]);
   const [malEpisodes, setMalEpisodes] = useState<any[]>([]);
   const [fillerEpisodes, setFillerEpisodes] = useState<number[]>([]);
@@ -213,6 +215,7 @@ export default function Watch() {
               
               const malId = data.Media.idMal || (mapping?.mal_id ? Number(mapping.mal_id) : null);
               if (malId) {
+                setMalId(malId);
                 if (!data.Media.format) {
                   import('../api/mal').then(({ malClient }) => {
                     malClient.getAnimeType(malId).then(malType => {
@@ -228,45 +231,40 @@ export default function Watch() {
                   epCount = data.Media.nextAiringEpisode.episode - 1;
                 }
 
-                const hasFullAnilistEps = Array.isArray(data.Media.streamingEpisodes) &&
-                  data.Media.streamingEpisodes.length >= Math.min(epCount, 24);
+                const currentEpNum = isNaN(currentEp) ? 1 : currentEp;
+                const pStart = Math.max(1, Math.floor((currentEpNum - 1) / 100) * 100 + 1);
+                const pEnd = pStart + 99;
 
-                if (!hasFullAnilistEps) {
-                  const currentEpNum = isNaN(currentEp) ? 1 : currentEp;
-                  const pStart = Math.max(1, Math.floor((currentEpNum - 1) / 100) * 100 + 1);
-                  const pEnd = pStart + 99;
-
-                  try {
-                    const { kitsuClient } = await import('../api/kitsu');
-                    const kitsuId = await kitsuClient.getKitsuIdByMalId(malId);
-                    if (kitsuId) {
-                      const epData = await kitsuClient.getEpisodes(
-                        kitsuId,
-                        { start: pStart, end: pEnd },
-                        (newEps) => {
-                          setKitsuEpisodes([...newEps]);
-                        }
-                      );
-                      if (epData && epData.length > 0) {
-                        setKitsuEpisodes([...epData]);
-                      }
-                    } else {
-                      // Only fetch from MAL if Kitsu is unavailable
-                      const { malClient } = await import('../api/mal');
-                      const malEpData = await malClient.getEpisodes(
-                        malId,
-                        { start: pStart, end: pEnd },
-                        (newEps) => {
-                          setMalEpisodes([...newEps]);
-                        }
-                      );
-                      if (malEpData && malEpData.length > 0) {
-                        setMalEpisodes([...malEpData]);
-                      }
+                // 1. Fetch episode release dates from Jikan API
+                import('../api/jikan').then(({ jikanClient }) => {
+                  jikanClient.getEpisodes(
+                    malId,
+                    { start: pStart, end: pEnd },
+                    (newEps) => {
+                      setMalEpisodes([...newEps]);
                     }
-                  } catch (e) {
-                    console.error('Watch episode fetch error', e);
+                  ).catch(() => {});
+                }).catch(() => {});
+
+                // 2. Fetch episode thumbnails & titles from Kitsu
+                try {
+                  const { kitsuClient } = await import('../api/kitsu');
+                  const resolvedKitsuId = await kitsuClient.getKitsuIdByMalId(malId);
+                  if (resolvedKitsuId) {
+                    setKitsuId(resolvedKitsuId);
+                    const epData = await kitsuClient.getEpisodes(
+                      resolvedKitsuId,
+                      { start: pStart, end: pEnd },
+                      (newEps) => {
+                        setKitsuEpisodes([...newEps]);
+                      }
+                    );
+                    if (epData && epData.length > 0) {
+                      setKitsuEpisodes([...epData]);
+                    }
                   }
+                } catch (e) {
+                  console.error('Watch episode fetch error', e);
                 }
               }
             })
@@ -293,6 +291,35 @@ export default function Watch() {
 
     if (animeId) loadDetails();
   }, [animeId, currentEp]);
+
+  useEffect(() => {
+    if (episodeChunk !== undefined) {
+      const pStart = episodeChunk * 100 + 1;
+      const pEnd = pStart + 99;
+      if (malId) {
+        import('../api/jikan').then(({ jikanClient }) => {
+          jikanClient.getEpisodes(malId, { start: pStart, end: pEnd }, (newEps) => {
+            setMalEpisodes(prev => {
+              const map = new Map(prev.map((e: any) => [e.num, e]));
+              newEps.forEach((e: any) => map.set(e.num, e));
+              return Array.from(map.values()).sort((a: any, b: any) => a.num - b.num);
+            });
+          }).catch(() => {});
+        });
+      }
+      if (kitsuId) {
+        import('../api/kitsu').then(({ kitsuClient }) => {
+          kitsuClient.getEpisodes(kitsuId, { start: pStart, end: pEnd }, (newEps) => {
+            setKitsuEpisodes(prev => {
+              const map = new Map(prev.map((e: any) => [e.num, e]));
+              newEps.forEach((e: any) => map.set(e.num, e));
+              return Array.from(map.values()).sort((a: any, b: any) => a.num - b.num);
+            });
+          });
+        });
+      }
+    }
+  }, [malId, kitsuId, episodeChunk]);
 
   useEffect(() => {
     if (isHanimeMode() && anime?.idMal) {
