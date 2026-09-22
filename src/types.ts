@@ -25,6 +25,9 @@ export interface AnimeMedia {
   coverImage: AnimeCoverImage;
   bannerImage: string | null;
   averageScore: number;
+  popularity?: number;
+  trending?: number;
+  updatedAt?: number;
   description: string;
   episodes: number | null;
   status: string;

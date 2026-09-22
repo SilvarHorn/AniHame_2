@@ -8,9 +8,19 @@ interface MultiSelectProps {
   selected: (string | number)[];
   onChange: (selected: (string | number)[]) => void;
   columns?: number;
+  operator?: 'and' | 'or';
+  onOperatorChange?: (operator: 'and' | 'or') => void;
 }
 
-export default function MultiSelect({ label, options, selected, onChange, columns = 1 }: MultiSelectProps) {
+export default function MultiSelect({
+  label,
+  options,
+  selected,
+  onChange,
+  columns = 1,
+  operator,
+  onOperatorChange
+}: MultiSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -60,6 +70,41 @@ export default function MultiSelect({ label, options, selected, onChange, column
             transition={{ duration: 0.15 }}
             className={`absolute top-full left-0 mt-1 bg-[#151F2E] border border-primary/20 rounded-lg shadow-xl z-50 ${getGridClass()}`}
           >
+            {operator && onOperatorChange && (
+              <div className="col-span-full flex items-center justify-between px-2 py-1.5 mb-1 border-b border-gray-700/60">
+                <span className="text-[11px] text-gray-400 font-medium">Match:</span>
+                <div className="inline-flex items-center bg-[#0B0C0F] border border-gray-700 rounded-md p-0.5">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOperatorChange('and');
+                    }}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-colors ${
+                      operator === 'and'
+                        ? 'bg-primary text-[#0B0C0F]'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    AND
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOperatorChange('or');
+                    }}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-colors ${
+                      operator === 'or'
+                        ? 'bg-primary text-[#0B0C0F]'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    OR
+                  </button>
+                </div>
+              </div>
+            )}
             {options.map((option) => {
               const isSelected = selected.includes(option.value);
               if (columns > 1) {

@@ -133,6 +133,16 @@ export default function Navbar() {
                 <Link to="/" className={getNavClass('/')}>Home</Link>
                 <Link to="/explore" className={getNavClass('/explore')}>Explore</Link>
                 <Link to="/trending" className={getNavClass('/trending')}>Trending</Link>
+                <Link 
+                  to={`/random?t=${Date.now()}`} 
+                  onClick={(e) => {
+                    e.preventDefault();
+                    navigate(`/random?t=${Date.now()}`);
+                  }}
+                  className={getNavClass('/random')}
+                >
+                  Random
+                </Link>
                 <Link to="/profile" className={getNavClass('/profile')}>My List</Link>
                 <Link to="/schedule" className={getNavClass('/schedule')}>Schedule</Link>
               </div>
@@ -240,6 +250,17 @@ export default function Navbar() {
             <Link to="/" onClick={() => setIsMobileMenuOpen(false)} className={getMobileNavClass('/')}>Home</Link>
             <Link to="/explore" onClick={() => setIsMobileMenuOpen(false)} className={getMobileNavClass('/explore')}>Explore</Link>
             <Link to="/trending" onClick={() => setIsMobileMenuOpen(false)} className={getMobileNavClass('/trending')}>Trending</Link>
+            <Link 
+              to={`/random?t=${Date.now()}`} 
+              onClick={(e) => {
+                e.preventDefault();
+                setIsMobileMenuOpen(false);
+                navigate(`/random?t=${Date.now()}`);
+              }} 
+              className={getMobileNavClass('/random')}
+            >
+              Random
+            </Link>
             <Link to="/profile" onClick={() => setIsMobileMenuOpen(false)} className={getMobileNavClass('/profile')}>My List</Link>
             <Link to="/schedule" onClick={() => setIsMobileMenuOpen(false)} className={getMobileNavClass('/schedule')}>Schedule</Link>
           </div>

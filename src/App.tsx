@@ -9,6 +9,7 @@ import DevToolsGuard from './components/DevToolsGuard';
 const Home = lazy(() => import('./pages/Home'));
 const Explore = lazy(() => import('./pages/Explore'));
 const Trending = lazy(() => import('./pages/Trending'));
+const Random = lazy(() => import('./pages/Random'));
 const AnimeDetails = lazy(() => import('./pages/AnimeDetails'));
 const Watch = lazy(() => import('./pages/Watch'));
 const Profile = lazy(() => import('./pages/Profile'));
@@ -73,6 +74,7 @@ function AnimatedRoutes() {
         <Route path="/" element={<Suspense fallback={<PageLoader />}><PageWrapper><Home /></PageWrapper></Suspense>} />
         <Route path="/explore" element={<Suspense fallback={<PageLoader />}><PageWrapper><Explore /></PageWrapper></Suspense>} />
         <Route path="/trending" element={<Suspense fallback={<PageLoader />}><PageWrapper><Trending /></PageWrapper></Suspense>} />
+        <Route path="/random" element={<Suspense fallback={<PageLoader />}><PageWrapper><Random /></PageWrapper></Suspense>} />
         <Route path="/anime/:id" element={<Suspense fallback={<PageLoader />}><PageWrapper><AnimeDetails /></PageWrapper></Suspense>} />
         <Route path="/watch/:id/:ep" element={<Suspense fallback={<PageLoader />}><PageWrapper><Watch /></PageWrapper></Suspense>} />
         <Route path="/profile" element={<Suspense fallback={<PageLoader />}><PageWrapper><Profile /></PageWrapper></Suspense>} />

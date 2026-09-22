@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { fetchAnilist, SEARCH_ANIME_QUERY } from '../api/anilist';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { fetchAnilist, SEARCH_ANIME_QUERY, searchAnimeMedia, getRandomAnimeWithReroll } from '../api/anilist';
 import { AnimeMedia } from '../types';
 import AnimeCard from '../components/ui/AnimeCard';
 import AnimeCardSkeleton from '../components/ui/AnimeCardSkeleton';
@@ -8,7 +8,7 @@ import { preloadAnimeThumbnails } from '../utils/imagePreload';
 import MultiSelect from '../components/ui/MultiSelect';
 import SingleSelect from '../components/ui/SingleSelect';
 import { motion, AnimatePresence } from 'motion/react';
-import { Filter, ChevronDown, Check, X, RotateCcw, Search as SearchIcon } from 'lucide-react';
+import { Filter, ChevronDown, Check, X, RotateCcw, Search as SearchIcon, Shuffle } from 'lucide-react';
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEARS = Array.from({ length: 40 }, (_, i) => CURRENT_YEAR + 1 - i);
@@ -82,10 +82,13 @@ function YearGridSelect({ value, onChange, options }: { value: string|number, on
 
 export default function Explore() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const [isPickingRandom, setIsPickingRandom] = useState(false);
   
   const [localFilters, setLocalFilters] = useState({
     searchQuery: searchParams.get('search') || '',
     genres: searchParams.get('genre') ? (searchParams.get('genre') as string).split(',').map(s => s.trim()).filter(Boolean) : [],
+    genreOperator: (searchParams.get('genreOp') === 'or' ? 'or' : 'and') as 'and' | 'or',
     status: '',
     year: '' as string | number,
     season: '',
@@ -102,23 +105,48 @@ export default function Explore() {
   
   const [page, setPage] = useState(1);
   const [hasNextPage, setHasNextPage] = useState(true);
+  const [isEditingPage, setIsEditingPage] = useState(false);
+  const [jumpPageInput, setJumpPageInput] = useState('1');
+  const pageFormRef = useRef<HTMLFormElement>(null);
+  const pageInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isEditingPage) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (pageFormRef.current && !pageFormRef.current.contains(e.target as Node)) {
+        setIsEditingPage(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isEditingPage]);
+
+  useEffect(() => {
+    if (isEditingPage && pageInputRef.current) {
+      pageInputRef.current.focus();
+      pageInputRef.current.select();
+    }
+  }, [isEditingPage]);
 
   // Sync initial query if it changes from URL (e.g. Navbar search, tags, or genre links)
   useEffect(() => {
     const q = searchParams.get('search') || '';
     const genreParam = searchParams.get('genre');
     const gList = genreParam ? genreParam.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const genreOp = (searchParams.get('genreOp') === 'or' ? 'or' : 'and') as 'and' | 'or';
     
     setLocalFilters(prev => ({
       ...prev,
       searchQuery: q,
-      genres: gList
+      genres: gList,
+      genreOperator: genreOp
     }));
     
     setAppliedFilters(prev => ({
       ...prev,
       searchQuery: q,
-      genres: gList
+      genres: gList,
+      genreOperator: genreOp
     }));
     
     setPage(1);
@@ -130,9 +158,10 @@ export default function Explore() {
       setLoading(true);
       setError('');
       try {
-        const data = await fetchAnilist(SEARCH_ANIME_QUERY, { 
+        const { media: results, hasNextPage: hasNext } = await searchAnimeMedia({
           search: appliedFilters.searchQuery ? appliedFilters.searchQuery.trim() : undefined,
-          genre_in: appliedFilters.genres.length > 0 ? appliedFilters.genres : undefined,
+          genres: appliedFilters.genres,
+          genreOperator: appliedFilters.genreOperator,
           status_in: appliedFilters.status ? [appliedFilters.status] : undefined,
           seasonYear: appliedFilters.year ? Number(appliedFilters.year) : undefined,
           season: appliedFilters.season ? appliedFilters.season : undefined,
@@ -144,15 +173,11 @@ export default function Explore() {
         
         if (!isCurrent) return;
 
-        const results = data?.Page?.media || [];
         // Preload all thumbnails so the entire batch loads together without piecemeal pop-in
         await preloadAnimeThumbnails(results);
         if (!isCurrent) return;
 
         setSearchResults(results);
-        const hasNext = data?.Page?.pageInfo?.hasNextPage !== undefined
-          ? Boolean(data.Page.pageInfo.hasNextPage)
-          : (results.length >= 24);
         setHasNextPage(hasNext);
       } catch (err: any) {
         if (!isCurrent) return;
@@ -182,6 +207,9 @@ export default function Explore() {
     }
     if (localFilters.genres.length > 0) {
       nextParams.genre = localFilters.genres.join(',');
+      if (localFilters.genreOperator === 'or') {
+        nextParams.genreOp = 'or';
+      }
     }
     setSearchParams(nextParams);
   };
@@ -190,6 +218,7 @@ export default function Explore() {
     const defaultFilters = {
       searchQuery: '',
       genres: [],
+      genreOperator: 'and' as 'and' | 'or',
       status: '',
       year: '' as string | number,
       season: '',
@@ -230,8 +259,12 @@ export default function Explore() {
       const nextParams = new URLSearchParams(prev);
       if (next.length > 0) {
         nextParams.set('genre', next.join(','));
+        if (appliedFilters.genreOperator === 'or') {
+          nextParams.set('genreOp', 'or');
+        }
       } else {
         nextParams.delete('genre');
+        nextParams.delete('genreOp');
       }
       return nextParams;
     });
@@ -291,6 +324,84 @@ export default function Explore() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handlePageJumpSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const p = parseInt(jumpPageInput.trim(), 10);
+    if (!isNaN(p) && p >= 1) {
+      if (p !== page) {
+        handlePageChange(p);
+      }
+    }
+    setIsEditingPage(false);
+  };
+
+  const handleRandomPick = async () => {
+    setIsPickingRandom(true);
+    setError('');
+
+    try {
+      const filtersToUse = showFilters ? localFilters : appliedFilters;
+      const isFilterSelected =
+        Boolean(filtersToUse.searchQuery.trim()) ||
+        filtersToUse.genres.length > 0 ||
+        filtersToUse.formats.length > 0 ||
+        Boolean(filtersToUse.status) ||
+        Boolean(filtersToUse.season) ||
+        Boolean(filtersToUse.year);
+
+      if (isFilterSelected) {
+        // Filter is selected: pick random anime from that filtered list
+        let pool = searchResults;
+
+        // If search results are empty or the drawer has unapplied local filter selections
+        if (showFilters || pool.length === 0) {
+          const res = await searchAnimeMedia({
+            search: filtersToUse.searchQuery ? filtersToUse.searchQuery.trim() : undefined,
+            genres: filtersToUse.genres,
+            genreOperator: filtersToUse.genreOperator,
+            status_in: filtersToUse.status ? [filtersToUse.status] : undefined,
+            seasonYear: filtersToUse.year ? Number(filtersToUse.year) : undefined,
+            season: filtersToUse.season ? filtersToUse.season : undefined,
+            format_in: filtersToUse.formats.length > 0 ? filtersToUse.formats : undefined,
+            sort: [filtersToUse.sort],
+            page: 1,
+            perPage: 24
+          });
+          pool = res.media || [];
+        }
+
+        const validPool = pool.filter(a => 
+          a && 
+          a.id && 
+          (a.title?.english || a.title?.romaji || a.title?.native) &&
+          (a.coverImage?.large || a.coverImage?.extraLarge)
+        );
+
+        if (validPool.length > 0) {
+          const chosen = validPool[Math.floor(Math.random() * validPool.length)];
+          navigate(`/anime/${chosen.id}`);
+          return;
+        } else {
+          setError('No anime found matching your filter selection to pick from.');
+          return;
+        }
+      } else {
+        // No filter selected: pick any random anime with verified existence and reroll protection
+        const chosen = await getRandomAnimeWithReroll(12);
+        if (chosen && chosen.id) {
+          navigate(`/anime/${chosen.id}`);
+        } else {
+          throw new Error('Failed to retrieve a valid anime.');
+        }
+      }
+    } catch (err) {
+      console.error('Error selecting random anime:', err);
+      setError('Failed to pick a random anime. Please try again.');
+    } finally {
+      setIsPickingRandom(false);
+    }
+  };
+
   return (
     <div className="w-full px-4 sm:px-6 lg:px-8 py-12">
       <div className="relative z-40 flex flex-col gap-4 mb-6">
@@ -347,6 +458,16 @@ export default function Explore() {
               <SearchIcon size={16} />
               <span>Search</span>
             </button>
+            <button
+              type="button"
+              onClick={handleRandomPick}
+              disabled={isPickingRandom}
+              className="flex-1 md:flex-none px-6 py-3 bg-[#151F2E] hover:bg-[#1A2737] text-primary hover:text-white border border-primary/30 hover:border-primary font-bold rounded-lg transition-all text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              title={activeFilterCount > 0 ? "Pick a random anime from this filtered list" : "Pick a random anime"}
+            >
+              <Shuffle size={16} className={isPickingRandom ? "animate-spin" : ""} />
+              <span>{isPickingRandom ? "Picking..." : "Random Anime"}</span>
+            </button>
           </div>
         </div>
 
@@ -374,13 +495,43 @@ export default function Explore() {
 
                   {/* Genres (MultiSelect) */}
                   <div className="flex flex-col gap-2">
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Genres</label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Genres</label>
+                      <div className="inline-flex items-center bg-[#151F2E] border border-gray-700/80 rounded-md p-0.5" role="group" aria-label="Genre match logic">
+                        <button
+                          type="button"
+                          onClick={() => setLocalFilters(prev => ({ ...prev, genreOperator: 'and' }))}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-colors ${
+                            localFilters.genreOperator === 'and'
+                              ? 'bg-primary text-[#0B0C0F]'
+                              : 'text-gray-400 hover:text-white'
+                          }`}
+                          title="All selected genres must be present (AND)"
+                        >
+                          AND
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLocalFilters(prev => ({ ...prev, genreOperator: 'or' }))}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-colors ${
+                            localFilters.genreOperator === 'or'
+                              ? 'bg-primary text-[#0B0C0F]'
+                              : 'text-gray-400 hover:text-white'
+                          }`}
+                          title="Any selected genre can be present (OR)"
+                        >
+                          OR
+                        </button>
+                      </div>
+                    </div>
                     <MultiSelect 
                       label="Select Genres"
                       options={GENRES.map(g => ({ label: g, value: g }))}
                       selected={localFilters.genres}
                       onChange={v => setLocalFilters({ ...localFilters, genres: v as string[] })}
                       columns={3}
+                      operator={localFilters.genreOperator}
+                      onOperatorChange={op => setLocalFilters(prev => ({ ...prev, genreOperator: op }))}
                     />
                   </div>
 
@@ -453,7 +604,17 @@ export default function Explore() {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-3 w-full sm:w-auto">
+                  <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+                    <button
+                      type="button"
+                      onClick={handleRandomPick}
+                      disabled={isPickingRandom}
+                      className="flex-1 sm:flex-none px-4 py-2 text-xs font-bold text-primary bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      title="Pick a random anime from these filters"
+                    >
+                      <Shuffle size={13} className={isPickingRandom ? "animate-spin" : ""} />
+                      <span>{isPickingRandom ? "Picking..." : "Random Pick"}</span>
+                    </button>
                     <button
                       type="button"
                       onClick={() => setShowFilters(false)}
@@ -497,6 +658,12 @@ export default function Explore() {
                 </button>
               </span>
             ))}
+
+            {appliedFilters.genres.length > 1 && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#151F2E] text-gray-300 border border-gray-700">
+                Match: {appliedFilters.genreOperator === 'or' ? 'ANY (OR)' : 'ALL (AND)'}
+              </span>
+            )}
 
             {appliedFilters.formats.map(f => (
               <span key={f} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20">
@@ -603,7 +770,59 @@ export default function Explore() {
             >
               Previous
             </button>
-            <span className="text-gray-400 font-medium text-sm">Page {page}</span>
+            {isEditingPage ? (
+              <form
+                ref={pageFormRef}
+                onSubmit={handlePageJumpSubmit}
+                className="flex items-center gap-1.5 bg-[#151F2E] border border-primary/50 rounded-lg px-2.5 py-1.5 shadow-lg shadow-black/50"
+              >
+                <span className="text-gray-400 font-medium text-sm">Page</span>
+                <input
+                  ref={pageInputRef}
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={jumpPageInput}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, '');
+                    setJumpPageInput(val);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') setIsEditingPage(false);
+                  }}
+                  className="w-16 bg-[#0B0C0F] text-white text-center font-bold text-sm rounded px-1.5 py-0.5 border border-gray-700 focus:outline-none focus:border-primary no-spinner"
+                />
+                <button
+                  type="submit"
+                  className="px-2.5 py-1 bg-primary text-[#0B0C0F] font-bold text-xs rounded hover:bg-primary/90 transition-colors cursor-pointer"
+                >
+                  Go
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingPage(false)}
+                  className="text-gray-400 hover:text-white p-1 rounded hover:bg-white/5 transition-colors cursor-pointer"
+                  title="Cancel"
+                >
+                  <X size={14} />
+                </button>
+              </form>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setJumpPageInput(String(page));
+                  setIsEditingPage(true);
+                }}
+                className="group flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#151F2E] hover:bg-[#1A2737] border border-gray-800 hover:border-primary/50 transition-all text-sm font-medium text-gray-300 hover:text-white cursor-pointer"
+                title="Click to enter page number"
+              >
+                <span>Page</span>
+                <span className="text-primary font-bold bg-primary/10 group-hover:bg-primary/20 px-2 py-0.5 rounded border border-primary/20 transition-colors">
+                  {page}
+                </span>
+              </button>
+            )}
             <button
               onClick={() => handlePageChange(page + 1)}
               disabled={!hasNextPage || loading}
