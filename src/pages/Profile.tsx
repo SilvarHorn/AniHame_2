@@ -37,11 +37,11 @@ export default function Profile() {
   const [showEpisodeDate, setShowEpisodeDate] = useState<boolean>(true);
   const [serverOrder, setServerOrder] = useState<WatchServerType[]>(DEFAULT_SERVER_ORDER);
   const [cardBorderMode, setCardBorderMode] = useState<'default' | 'custom'>('default');
-  const [cardBorderColor, setCardBorderColor] = useState('#35D5BF');
+  const [cardBorderColor, setCardBorderColor] = useState('#FBF3E5');
   const [cardBorderWidth, setCardBorderWidth] = useState(2);
   
   // Theme state
-  const [themeColor, setThemeColor] = useState('#8AD7D0');
+  const [themeColor, setThemeColor] = useState('#FBF3E5');
   const [gradType, setGradType] = useState('solid');
   const [gradDir, setGradDir] = useState('to right');
   const [gradColor1, setGradColor1] = useState('#0B0C0F');
@@ -80,10 +80,10 @@ export default function Profile() {
       }
       if (profile.preferences?.cardBorder) {
         setCardBorderMode(profile.preferences.cardBorder.mode || 'default');
-        setCardBorderColor(profile.preferences.cardBorder.color || '#35D5BF');
+        setCardBorderColor(profile.preferences.cardBorder.color || '#FBF3E5');
         setCardBorderWidth(profile.preferences.cardBorder.width || 2);
       }
-      setThemeColor(profile.themeColor || '#8AD7D0');
+      setThemeColor(profile.themeColor || '#FBF3E5');
       setBgGradient(profile.bgGradient || '');
       setBgImage(profile.bgImage || '');
       setBgOpacity(profile.bgOpacity ?? 100);
@@ -95,14 +95,14 @@ export default function Profile() {
           const parsed = JSON.parse(saved);
           if (parsed.username) setLocalDisplayName(parsed.username);
           if (parsed.avatar) setLocalAvatar(parsed.avatar);
-          if (parsed.themeColor) setThemeColor(parsed.themeColor);
+          if (parsed.themeColor) setThemeColor(parsed.themeColor === '#8AD7D0' ? '#FBF3E5' : parsed.themeColor);
           if (parsed.bgGradient !== undefined) setBgGradient(parsed.bgGradient);
           if (parsed.bgImage !== undefined) setBgImage(parsed.bgImage);
           if (parsed.bgOpacity !== undefined) setBgOpacity(parsed.bgOpacity);
           if (parsed.serverOrder) setServerOrder(parsed.serverOrder);
           if (parsed.cardBorder) {
             setCardBorderMode(parsed.cardBorder.mode || 'default');
-            setCardBorderColor(parsed.cardBorder.color || '#35D5BF');
+            setCardBorderColor(parsed.cardBorder.color === '#35D5BF' || parsed.cardBorder.color === '#8AD7D0' ? '#FBF3E5' : (parsed.cardBorder.color || '#FBF3E5'));
             setCardBorderWidth(parsed.cardBorder.width || 2);
           }
         }
@@ -585,7 +585,7 @@ export default function Profile() {
             <div className="bg-gray-900/50 p-5 rounded-xl border border-white/5">
               <label className="block text-sm font-medium text-gray-400 mb-3">Theme Color</label>
               <div className="flex flex-wrap gap-3">
-                {['#8AD7D0', '#FF8A65', '#9575CD', '#4DB6AC', '#F06292', '#64B5F6'].map(color => (
+                {['#FBF3E5', '#8AD7D0', '#FF8A65', '#9575CD', '#4DB6AC', '#F06292', '#64B5F6'].map(color => (
                   <button
                     key={color}
                     onClick={() => {
@@ -604,14 +604,14 @@ export default function Profile() {
                 <div 
                   className={cn(
                     "relative w-8 h-8 rounded-full overflow-hidden shrink-0 border-2 transition-transform cursor-pointer flex items-center justify-center",
-                    !['#8AD7D0', '#FF8A65', '#9575CD', '#4DB6AC', '#F06292', '#64B5F6'].includes(themeColor) 
+                    !['#FBF3E5', '#8AD7D0', '#FF8A65', '#9575CD', '#4DB6AC', '#F06292', '#64B5F6'].includes(themeColor) 
                       ? "scale-110 ring-2 ring-white ring-offset-2 ring-offset-gray-900 border-transparent" 
                       : "border-dashed border-gray-500 hover:scale-110 hover:border-gray-400"
                   )}
-                  style={{ backgroundColor: !['#8AD7D0', '#FF8A65', '#9575CD', '#4DB6AC', '#F06292', '#64B5F6'].includes(themeColor) ? themeColor : 'transparent' }}
+                  style={{ backgroundColor: !['#FBF3E5', '#8AD7D0', '#FF8A65', '#9575CD', '#4DB6AC', '#F06292', '#64B5F6'].includes(themeColor) ? themeColor : 'transparent' }}
                   title="Custom Color"
                 >
-                  {['#8AD7D0', '#FF8A65', '#9575CD', '#4DB6AC', '#F06292', '#64B5F6'].includes(themeColor) && (
+                  {['#FBF3E5', '#8AD7D0', '#FF8A65', '#9575CD', '#4DB6AC', '#F06292', '#64B5F6'].includes(themeColor) && (
                     <span className="text-gray-400 text-xs font-bold">+</span>
                   )}
                   <input
@@ -924,13 +924,13 @@ export default function Profile() {
                           setCardBorderColor(e.target.value);
                           if (!isEditing) setIsEditing(true);
                         }}
-                        placeholder="#35D5BF"
+                        placeholder="#FBF3E5"
                         className="bg-[#151F2E] text-xs font-mono uppercase text-[#FBF3E5] px-3 py-2 rounded-lg outline-none border border-gray-700 focus:border-primary w-28 transition-colors"
                       />
                       <button
                         type="button"
                         onClick={() => {
-                          setCardBorderColor('#35D5BF');
+                          setCardBorderColor('#FBF3E5');
                           setCardBorderWidth(2);
                           setCardBorderMode('default');
                           if (!isEditing) setIsEditing(true);
@@ -946,6 +946,7 @@ export default function Profile() {
                     {/* Color Presets */}
                     <div className="flex flex-wrap gap-2 mt-3">
                       {[
+                        { color: '#FBF3E5', name: 'Cream' },
                         { color: '#35D5BF', name: 'Kozo' },
                         { color: '#8AD7D0', name: 'Mint' },
                         { color: '#EF4444', name: 'Crimson' },
@@ -954,7 +955,7 @@ export default function Profile() {
                         { color: '#3B82F6', name: 'Blue' },
                         { color: '#10B981', name: 'Emerald' },
                         { color: '#F43F5E', name: 'Rose' },
-                        { color: '#FBF3E5', name: 'Warm White' },
+                        { color: '#FFFFFF', name: 'White' },
                       ].map((item) => (
                         <button
                           key={item.color}

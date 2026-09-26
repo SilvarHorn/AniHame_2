@@ -20,7 +20,7 @@ export const DEFAULT_SERVER_ORDER: WatchServerType[] = [
 
 export const DEFAULT_CARD_BORDER: CardBorderPreferences = {
   mode: 'default',
-  color: '#35D5BF',
+  color: '#FBF3E5',
   width: 2
 };
 
@@ -65,6 +65,7 @@ const defaultProfile: UserProfile = {
   email: null,
   displayName: 'User',
   photoURL: null,
+  themeColor: '#FBF3E5',
   preferences: defaultPreferences
 };
 
@@ -86,7 +87,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const stored = localStorage.getItem('app_user_profile_data');
       if (stored) {
-        setProfile(JSON.parse(stored));
+        const parsed = JSON.parse(stored);
+        if (!parsed.themeColor || parsed.themeColor === '#8AD7D0') {
+          parsed.themeColor = '#FBF3E5';
+        }
+        if (parsed.preferences?.cardBorder?.color === '#35D5BF' || parsed.preferences?.cardBorder?.color === '#8AD7D0') {
+          parsed.preferences.cardBorder.color = '#FBF3E5';
+        }
+        setProfile(parsed);
       } else {
         setProfile(defaultProfile);
       }
@@ -105,7 +113,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const navData = {
           username: profile.displayName || 'User',
           avatar: profile.photoURL || '',
-          themeColor: profile.themeColor || '#8AD7D0',
+          themeColor: profile.themeColor || '#FBF3E5',
           bgGradient: profile.bgGradient || '',
           bgImage: profile.bgImage || '',
           bgOpacity: profile.bgOpacity ?? 100,

@@ -583,12 +583,12 @@ export default function AnimeDetails() {
                           <div className="flex-1 min-w-0">
                             <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mb-1">
                               <div className="flex items-center gap-2">
-                                <span className={cn("text-xl font-black shrink-0", isFiller ? "text-[#f97316]" : "text-white")}>{ep}</span>
+                                <span className={cn("text-xl font-black shrink-0", isFiller ? "text-[#f97316]" : "text-[#FBF3E5]")}>{ep}</span>
                                 {isFiller && <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full bg-[#f97316]/20 text-[#f97316] border border-[#f97316]/30 font-bold tracking-wider shrink-0">FILLER</span>}
                               </div>
                               <MarqueeText 
                                 text={episodeTitleMap.get(ep) || `Episode ${ep}`}
-                                className={cn("text-xs sm:text-sm font-medium transition-colors", isFiller ? "text-[#f97316]/80 group-hover:text-[#f97316]" : "text-gray-400 group-hover:text-white")}
+                                className={cn("text-xs sm:text-sm font-medium transition-colors", isFiller ? "text-[#f97316]/80 group-hover:text-[#f97316]" : "text-gray-400 group-hover:text-[#FBF3E5]")}
                                 align="left"
                               />
                               {profile?.preferences?.showEpisodeDate !== false && episodeAiredMap.get(ep) && (
@@ -619,7 +619,7 @@ export default function AnimeDetails() {
                           
                           <div className="relative z-10 flex flex-col items-center justify-center w-full h-full p-2">
                             <div className="absolute inset-0 flex flex-col items-center justify-center transition-all duration-300 group-hover:opacity-0 group-hover:scale-90">
-                              <span className={cn("text-3xl font-black drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]", isFiller ? "text-[#f97316]" : "text-white")}>
+                              <span className={cn("text-3xl font-black drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]", isFiller ? "text-[#f97316]" : "text-[#FBF3E5]")}>
                                 {ep}
                               </span>
                               {isFiller && <span className="text-[10px] font-bold text-[#f97316] bg-black/50 px-1.5 py-0.5 rounded mt-1">FILLER</span>}
@@ -627,7 +627,7 @@ export default function AnimeDetails() {
                             <div className="absolute inset-0 flex flex-col items-center justify-center p-2 opacity-0 group-hover:opacity-100 transition-all duration-300 scale-105 group-hover:scale-100">
                               <MarqueeText 
                                 text={episodeTitleMap.get(ep) || `Episode ${ep}`}
-                                className={cn("text-xs font-medium drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] leading-tight", isFiller ? "text-[#f97316]" : "text-white")}
+                                className={cn("text-xs font-medium drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] leading-tight", isFiller ? "text-[#f97316]" : "text-[#FBF3E5]")}
                               />
                               {profile?.preferences?.showEpisodeDate !== false && episodeAiredMap.get(ep) && (
                                 <div className="text-[9px] text-gray-400 mt-1 opacity-80">{episodeAiredMap.get(ep)}</div>

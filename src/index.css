@@ -1,15 +1,13 @@
 @import "tailwindcss";
 
 @theme {
-  --color-white: #FBF3E5;
-  --color-primary: var(--theme-color, #8AD7D0);
-  --color-primary-hover: var(--theme-color-hover, #7bc2bc);
+  --color-primary: var(--theme-color, #FBF3E5);
+  --color-primary-hover: var(--theme-color-hover, #e8dfcf);
 }
 
 :root {
-  --color-white: #FBF3E5;
-  --theme-color: #8AD7D0;
-  --theme-color-hover: #7bc2bc;
+  --theme-color: #FBF3E5;
+  --theme-color-hover: #e8dfcf;
 }
 
 @layer utilities {
@@ -60,7 +58,7 @@
 @layer utilities {
   .dotted-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: var(--theme-color, #8AD7D0) transparent;
+    scrollbar-color: var(--theme-color, #FBF3E5) transparent;
   }
 }
 

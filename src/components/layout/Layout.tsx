@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Navbar from './Navbar';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  const [themeColor, setThemeColor] = useState('#8AD7D0');
+  const [themeColor, setThemeColor] = useState('#FBF3E5');
   const [bgGradient, setBgGradient] = useState('');
   const [bgImage, setBgImage] = useState('');
   const [bgOpacity, setBgOpacity] = useState(100);
@@ -13,11 +13,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         const saved = localStorage.getItem('anime_profile');
         if (saved) {
           const parsed = JSON.parse(saved);
-          if (parsed.themeColor) {
-            setThemeColor(parsed.themeColor);
-            document.documentElement.style.setProperty('--theme-color', parsed.themeColor);
-            document.documentElement.style.setProperty('--theme-color-hover', parsed.themeColor);
+          let color = parsed.themeColor;
+          if (!color || color === '#8AD7D0') {
+            color = '#FBF3E5';
           }
+          setThemeColor(color);
+          document.documentElement.style.setProperty('--theme-color', color);
+          document.documentElement.style.setProperty('--theme-color-hover', color);
           if (parsed.bgGradient !== undefined) {
             setBgGradient(parsed.bgGradient);
           }
@@ -27,6 +29,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           if (parsed.bgOpacity !== undefined) {
             setBgOpacity(parsed.bgOpacity);
           }
+        } else {
+          document.documentElement.style.setProperty('--theme-color', '#FBF3E5');
+          document.documentElement.style.setProperty('--theme-color-hover', '#e8dfcf');
         }
       } catch (e) {}
     };

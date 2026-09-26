@@ -54,7 +54,7 @@ function ContinueWatchingCard({ item, onRemove, isCustomBorder, borderColor, bor
           />
           <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-[#0F1115] via-transparent to-transparent opacity-90" />
           <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity">
-            <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-primary flex items-center justify-center text-[#0B0C0F] shadow-[0_0_20px_rgba(83,131,232,0.4)]">
+            <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-primary flex items-center justify-center text-[#0B0C0F] shadow-[0_0_20px_rgba(251,243,229,0.4)]">
               <Play size={24} fill="currentColor" className="ml-1" />
             </div>
           </div>
@@ -103,7 +103,7 @@ export default React.memo(function ContinueWatching() {
   const cardBorder = profile?.preferences?.cardBorder;
   const isCustomBorder = cardBorder?.mode === 'custom' && Boolean(cardBorder?.color);
   const borderWidth = Math.max(1, Math.min(10, cardBorder?.width || 2));
-  const borderColor = cardBorder?.color || '#35D5BF';
+  const borderColor = cardBorder?.color || '#FBF3E5';
 
   return (
     <section className="shrink-0 w-full">

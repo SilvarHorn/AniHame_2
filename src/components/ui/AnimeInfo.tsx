@@ -112,7 +112,7 @@ export function AnimeInfo({
     <div className={cn("bg-gray-800/30 rounded-xl p-4 sm:p-6 border border-white/5", className)}>
       {!hideTitle && <h2 className="text-2xl font-bold text-[#FBF3E5] mb-4">About {title}</h2>}
       
-      <div className="flex flex-wrap items-center gap-4 text-sm text-[#FBF3E5]/90 mb-6 font-medium">
+      <div className="flex flex-wrap items-center gap-4 text-sm text-gray-300 mb-6 font-medium">
         <div className="flex items-center gap-1.5 text-primary">
           <Star size={16} fill="currentColor" />
           <span>{anime.averageScore}%</span>
@@ -121,7 +121,7 @@ export function AnimeInfo({
         {ageRating && (
           <>
             <div className="w-1.5 h-1.5 rounded-full bg-gray-600" />
-            <div className="flex items-center gap-1.5 text-[#FBF3E5]/90">
+            <div className="flex items-center gap-1.5 text-gray-300">
               <span className="px-2 py-0.5 rounded text-[11px] font-bold border border-gray-600 uppercase tracking-wider">{ageRating}</span>
             </div>
           </>
@@ -167,15 +167,15 @@ export function AnimeInfo({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 text-sm">
         <div>
           <span className="text-gray-500 font-semibold">Aired:</span>
-          <span className="text-[#FBF3E5] ml-2">{airedString}</span>
+          <span className="text-gray-300 ml-2">{airedString}</span>
         </div>
         <div>
           <span className="text-gray-500 font-semibold">Status:</span>
-          <span className="text-[#FBF3E5] ml-2">{formattedStatus}</span>
+          <span className="text-gray-300 ml-2">{formattedStatus}</span>
         </div>
         <div className="md:col-span-2">
           <span className="text-gray-500 font-semibold">Studios:</span>
-          <span className="text-[#FBF3E5] ml-2">{studios}</span>
+          <span className="text-gray-300 ml-2">{studios}</span>
         </div>
       </div>
 

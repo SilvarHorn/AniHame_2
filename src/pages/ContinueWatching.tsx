@@ -46,13 +46,13 @@ export default function ContinueWatching() {
         <h1 className="text-3xl font-bold text-[#FBF3E5] flex items-center gap-3">
           <span 
             className="w-1.5 h-8 rounded-full inline-block"
-            style={{ backgroundColor: isCustomBorder ? borderColor : 'var(--theme-color, #8AD7D0)' }}
+            style={{ backgroundColor: isCustomBorder ? borderColor : 'var(--theme-color, #FBF3E5)' }}
           ></span>
           Continue Watching
         </h1>
         <span 
           className="bg-gray-800 text-gray-300 px-3 py-1 rounded-full text-sm font-bold border transition-colors"
-          style={isCustomBorder ? { borderColor: `${borderColor}50` } : { borderColor: 'rgba(251,243,229,0.05)' }}
+          style={isCustomBorder ? { borderColor: `${borderColor}50` } : { borderColor: 'rgba(255,255,255,0.05)' }}
         >
           {progress.length} Anime
         </span>

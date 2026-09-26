@@ -82,7 +82,7 @@ function AnimeCardComponent({
       className={`flex flex-col group cursor-pointer bg-[#0F1115] rounded-2xl overflow-hidden shadow-lg transition-all duration-200 hover:-translate-y-1 ${
         index !== undefined ? 'animate-card-enter' : ''
       } ${
-        isCustomBorder ? '' : 'border border-white/5 hover:shadow-xl hover:shadow-primary/10'
+        isCustomBorder ? '' : 'border border-white/5 hover:border-[#FBF3E5]/40 hover:shadow-xl hover:shadow-[#FBF3E5]/15'
       }`} 
       draggable={false}
       onMouseEnter={() => setIsHovered(true)}
@@ -129,7 +129,7 @@ function AnimeCardComponent({
         
         {/* Play Overlay */}
         <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-          <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-[#0B0C0F] shadow-[0_0_20px_rgba(83,131,232,0.4)]">
+          <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-[#0B0C0F] shadow-[0_0_20px_rgba(251,243,229,0.4)]">
             <Play size={24} fill="currentColor" className="ml-1" />
           </div>
         </div>
