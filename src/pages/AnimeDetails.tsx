@@ -498,7 +498,7 @@ export default function AnimeDetails() {
 
           {/* Right Column - Details */}
           <div className="flex-grow pt-8 md:pt-32">
-            <h1 className="text-3xl md:text-5xl font-bold text-[#EDF1F5] mb-4">
+            <h1 className="text-3xl md:text-5xl font-bold text-[#FBF3E5] mb-4">
               {title}
             </h1>
             <div className="mb-12">
@@ -514,7 +514,7 @@ export default function AnimeDetails() {
             {/* Episodes Section */}
             <div>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-                <h2 className="text-2xl font-bold text-[#EDF1F5] flex items-center gap-3">
+                <h2 className="text-2xl font-bold text-[#FBF3E5] flex items-center gap-3">
                   <span className="w-1.5 h-6 bg-primary rounded-full inline-block"></span>
                   Episodes
                 </h2>
@@ -650,7 +650,7 @@ export default function AnimeDetails() {
             {relatedAnimeList.length > 0 && (
               <div className="mt-16">
                 <div className="flex items-center mb-6">
-                  <h2 className="text-2xl font-bold text-[#EDF1F5] flex items-center gap-3">
+                  <h2 className="text-2xl font-bold text-[#FBF3E5] flex items-center gap-3">
                     <span className="w-1.5 h-6 bg-primary rounded-full inline-block"></span>
                     Related Anime
                   </h2>

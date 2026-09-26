@@ -47,7 +47,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div 
-      className="min-h-screen text-[#EDF1F5] font-sans selection:bg-primary/30 bg-fixed relative overflow-hidden bg-[#0B0C0F]"
+      className="min-h-screen text-[#FBF3E5] font-sans selection:bg-primary/30 bg-fixed relative overflow-hidden bg-[#0B0C0F]"
       style={
         !bgImage && bgGradient?.includes('gradient')
           ? { backgroundImage: bgGradient }

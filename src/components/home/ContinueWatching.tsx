@@ -61,7 +61,7 @@ function ContinueWatchingCard({ item, onRemove, isCustomBorder, borderColor, bor
           <div className="absolute bottom-0 left-0 h-1 bg-primary z-20" style={{ width: '75%', boxShadow: '0 0 10px var(--theme-color)' }}></div>
         </div>
         <div className="p-3 pt-2 pb-4 flex flex-col gap-1 z-10 relative bg-[#0F1115]">
-          <h3 className="text-[11px] font-bold text-[#EDF1F5] truncate group-hover/card:text-primary transition-colors">
+          <h3 className="text-[11px] font-bold text-[#FBF3E5] truncate group-hover/card:text-primary transition-colors">
             {item.animeTitle}
           </h3>
           <p className="text-[10px] font-medium text-gray-400">

@@ -60,7 +60,7 @@ function YearGridSelect({ value, onChange, options }: { value: string|number, on
 
   return (
     <div className="relative" ref={containerRef}>
-      <button type="button" onClick={() => setIsOpen(!isOpen)} className="flex w-full items-center justify-between min-w-[140px] h-[42px] bg-[#151F2E] border border-gray-700 hover:border-primary/50 transition-colors text-[#EDF1F5] text-sm rounded-md px-3 focus:outline-none focus:border-primary">
+      <button type="button" onClick={() => setIsOpen(!isOpen)} className="flex w-full items-center justify-between min-w-[140px] h-[42px] bg-[#151F2E] border border-gray-700 hover:border-primary/50 transition-colors text-[#FBF3E5] text-sm rounded-md px-3 focus:outline-none focus:border-primary">
         <span>{value || 'All Years'}</span>
         <ChevronDown size={16} className={`text-gray-400 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
@@ -405,7 +405,7 @@ export default function Explore() {
   return (
     <div className="w-full px-4 sm:px-6 lg:px-8 py-12">
       <div className="relative z-40 flex flex-col gap-4 mb-6">
-        <h1 className="text-3xl font-bold text-[#EDF1F5] flex items-center gap-3">
+        <h1 className="text-3xl font-bold text-[#FBF3E5] flex items-center gap-3">
           <span className="w-1.5 h-8 bg-primary rounded-full inline-block"></span>
           Explore Anime
         </h1>
@@ -418,7 +418,7 @@ export default function Explore() {
               value={localFilters.searchQuery}
               onChange={(e) => setLocalFilters({ ...localFilters, searchQuery: e.target.value })}
               onKeyDown={handleKeyDown}
-              className="w-full bg-[#151F2E] border border-gray-700 text-[#EDF1F5] rounded-lg pl-4 pr-10 py-3 focus:outline-none focus:border-primary transition-colors text-sm"
+              className="w-full bg-[#151F2E] border border-gray-700 text-[#FBF3E5] rounded-lg pl-4 pr-10 py-3 focus:outline-none focus:border-primary transition-colors text-sm"
             />
             {localFilters.searchQuery && (
               <button
@@ -439,7 +439,7 @@ export default function Explore() {
               className={`flex-1 md:flex-none px-6 py-3 rounded-lg flex items-center justify-center gap-2 font-bold transition-all text-sm ${
                 showFilters || activeFilterCount > 0
                   ? 'bg-primary text-[#0B0C0F]'
-                  : 'bg-[#151F2E] border border-gray-700 text-[#EDF1F5] hover:border-primary/50'
+                  : 'bg-[#151F2E] border border-gray-700 text-[#FBF3E5] hover:border-primary/50'
               }`}
             >
               <Filter size={18} />

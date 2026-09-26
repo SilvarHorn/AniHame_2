@@ -53,7 +53,7 @@ export default function MultiSelect({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center justify-between min-w-[140px] h-[42px] bg-[#151F2E] border border-gray-700 hover:border-primary/50 transition-colors text-[#EDF1F5] text-sm rounded-md px-3 focus:outline-none focus:border-primary"
+        className="flex w-full items-center justify-between min-w-[140px] h-[42px] bg-[#151F2E] border border-gray-700 hover:border-primary/50 transition-colors text-[#FBF3E5] text-sm rounded-md px-3 focus:outline-none focus:border-primary"
       >
         <span className="truncate pr-2">
           {selected.length === 0 ? label : `${label} (${selected.length})`}
@@ -125,7 +125,7 @@ export default function MultiSelect({
                   key={option.value}
                   type="button"
                   onClick={() => toggleOption(option.value)}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-[#EDF1F5] hover:bg-white/5 border-b border-gray-800 last:border-0 transition-colors text-left"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-[#FBF3E5] hover:bg-white/5 border-b border-gray-800 last:border-0 transition-colors text-left"
                 >
                   <div className={`w-4 h-4 rounded-[4px] border flex items-center justify-center transition-colors shrink-0 ${isSelected ? 'bg-primary border-primary' : 'border-gray-500 bg-transparent'}`}>
                     {isSelected && <Check size={12} className="text-white" />}

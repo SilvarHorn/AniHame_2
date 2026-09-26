@@ -499,7 +499,7 @@ export default function Profile() {
                       handleSaveAll();
                     }
                   }}
-                  className="text-3xl font-bold text-[#EDF1F5] bg-transparent border-b-2 border-primary focus:outline-none w-full max-w-xs"
+                  className="text-3xl font-bold text-[#FBF3E5] bg-transparent border-b-2 border-primary focus:outline-none w-full max-w-xs"
                   placeholder="Username"
                 />
                 {(localDisplayName === 'hanime' || localDisplayName === 'nhentai') && profile?.previousDisplayName && (
@@ -513,7 +513,7 @@ export default function Profile() {
               </div>
             ) : (
               <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-2">
-                <h1 className="text-3xl font-bold text-[#EDF1F5]">{localDisplayName}</h1>
+                <h1 className="text-3xl font-bold text-[#FBF3E5]">{localDisplayName}</h1>
                 {(localDisplayName === 'hanime' || localDisplayName === 'nhentai') && profile?.previousDisplayName && (
                   <button
                     onClick={() => {
@@ -576,7 +576,7 @@ export default function Profile() {
           </div>
         </div>
         <div className="border-t border-white/5 pt-8">
-          <h2 className="text-xl font-bold text-[#EDF1F5] mb-6 flex items-center gap-3">
+          <h2 className="text-xl font-bold text-[#FBF3E5] mb-6 flex items-center gap-3">
             <span className="w-1.5 h-6 bg-primary rounded-full inline-block"></span>
             Theme & Preferences
           </h2>
@@ -666,7 +666,7 @@ export default function Profile() {
                         value={gradDir} 
                         onChange={(e) => updateCustomGradient('dir', e.target.value)} 
                         placeholder="e.g. to right, 45deg" 
-                        className="bg-[#151F2E] text-sm text-[#EDF1F5] px-3 h-[42px] rounded-md outline-none flex-1 border border-gray-700 focus:border-primary transition-colors min-w-[140px]" 
+                        className="bg-[#151F2E] text-sm text-[#FBF3E5] px-3 h-[42px] rounded-md outline-none flex-1 border border-gray-700 focus:border-primary transition-colors min-w-[140px]" 
                       />
                     )}
                   </div>
@@ -719,7 +719,7 @@ export default function Profile() {
                     value={bgImage} 
                     onChange={(e) => { setBgImage(e.target.value); if(!isEditing) setIsEditing(true); }}
                     placeholder="https://example.com/image.jpg"
-                    className="bg-[#151F2E] text-[#EDF1F5] px-4 py-2.5 rounded-lg outline-none w-full border border-gray-700 focus:border-primary transition-colors text-sm flex-1"
+                    className="bg-[#151F2E] text-[#FBF3E5] px-4 py-2.5 rounded-lg outline-none w-full border border-gray-700 focus:border-primary transition-colors text-sm flex-1"
                   />
                   <input 
                     type="file"
@@ -850,7 +850,7 @@ export default function Profile() {
           <div className="bg-gray-900/50 p-5 rounded-xl border border-white/5 mt-6 flex flex-col gap-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/5">
               <div>
-                <label className="block text-sm font-bold text-[#EDF1F5] flex items-center gap-2">
+                <label className="block text-sm font-bold text-[#FBF3E5] flex items-center gap-2">
                   <Square size={16} className="text-primary" />
                   Anime Card Border Customization
                 </label>
@@ -925,7 +925,7 @@ export default function Profile() {
                           if (!isEditing) setIsEditing(true);
                         }}
                         placeholder="#35D5BF"
-                        className="bg-[#151F2E] text-xs font-mono uppercase text-[#EDF1F5] px-3 py-2 rounded-lg outline-none border border-gray-700 focus:border-primary w-28 transition-colors"
+                        className="bg-[#151F2E] text-xs font-mono uppercase text-[#FBF3E5] px-3 py-2 rounded-lg outline-none border border-gray-700 focus:border-primary w-28 transition-colors"
                       />
                       <button
                         type="button"
@@ -954,7 +954,7 @@ export default function Profile() {
                         { color: '#3B82F6', name: 'Blue' },
                         { color: '#10B981', name: 'Emerald' },
                         { color: '#F43F5E', name: 'Rose' },
-                        { color: '#FFFFFF', name: 'White' },
+                        { color: '#FBF3E5', name: 'Warm White' },
                       ].map((item) => (
                         <button
                           key={item.color}
@@ -1057,7 +1057,7 @@ export default function Profile() {
       {/* List Section */}
       <div>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
-          <h2 className="text-2xl font-bold text-[#EDF1F5] flex items-center gap-3">
+          <h2 className="text-2xl font-bold text-[#FBF3E5] flex items-center gap-3">
             <span className="w-1.5 h-6 bg-primary rounded-full inline-block"></span>
             My List
           </h2>
@@ -1075,7 +1075,7 @@ export default function Profile() {
                 "whitespace-nowrap px-4 py-2 rounded-lg text-sm font-bold transition-colors",
                 activeTab === tab.value 
                   ? 'bg-primary text-[#0B0C0F]' 
-                  : 'bg-[#151F2E] text-gray-400 hover:text-[#EDF1F5] border border-gray-800'
+                  : 'bg-[#151F2E] text-gray-400 hover:text-[#FBF3E5] border border-gray-800'
               )}
             >
               {tab.label}
@@ -1124,7 +1124,7 @@ export default function Profile() {
                 <User size={24} className="text-gray-400" />
               </div>
             )}
-            <h3 className="text-lg font-bold text-[#EDF1F5] mb-2">No anime found</h3>
+            <h3 className="text-lg font-bold text-[#FBF3E5] mb-2">No anime found</h3>
             <p className="text-gray-400">Add anime to your "{TABS.find(t => t.value === activeTab)?.label}" list to see them here.</p>
           </div>
         )}

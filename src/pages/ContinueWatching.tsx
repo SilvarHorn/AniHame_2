@@ -43,7 +43,7 @@ export default function ContinueWatching() {
   return (
     <div className="w-full px-4 sm:px-6 lg:px-8 py-12">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold text-[#EDF1F5] flex items-center gap-3">
+        <h1 className="text-3xl font-bold text-[#FBF3E5] flex items-center gap-3">
           <span 
             className="w-1.5 h-8 rounded-full inline-block"
             style={{ backgroundColor: isCustomBorder ? borderColor : 'var(--theme-color, #8AD7D0)' }}
@@ -52,7 +52,7 @@ export default function ContinueWatching() {
         </h1>
         <span 
           className="bg-gray-800 text-gray-300 px-3 py-1 rounded-full text-sm font-bold border transition-colors"
-          style={isCustomBorder ? { borderColor: `${borderColor}50` } : { borderColor: 'rgba(255,255,255,0.05)' }}
+          style={isCustomBorder ? { borderColor: `${borderColor}50` } : { borderColor: 'rgba(251,243,229,0.05)' }}
         >
           {progress.length} Anime
         </span>
@@ -94,7 +94,7 @@ export default function ContinueWatching() {
           <div className="bg-gray-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
             <User size={24} className="text-gray-400" />
           </div>
-          <h3 className="text-lg font-bold text-[#EDF1F5] mb-2">No active series</h3>
+          <h3 className="text-lg font-bold text-[#FBF3E5] mb-2">No active series</h3>
           <p className="text-gray-400">Start watching some anime and they will appear here!</p>
         </div>
       )}

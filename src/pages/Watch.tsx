@@ -590,7 +590,7 @@ export default function Watch() {
           >
             <ChevronLeft size={20} />
           </Link>
-          <h1 className="text-xl md:text-2xl font-bold text-[#EDF1F5] line-clamp-1">
+          <h1 className="text-xl md:text-2xl font-bold text-[#FBF3E5] line-clamp-1">
             {malTitle || (isHanimeMode() ? (anime.title.romaji || anime.title.english) : (anime.title.english || anime.title.romaji))}
             <span className="text-primary ml-2 font-medium">Episode {currentEp}</span>
           </h1>
@@ -960,7 +960,7 @@ export default function Watch() {
         {/* Right Side: Episodes Section */}
         <div className="w-full sm:max-w-[400px] md:max-w-[450px] lg:max-w-none mx-auto lg:mx-0 lg:w-[320px] xl:w-[360px] shrink-0 flex flex-col">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-[#EDF1F5] flex items-center gap-3">
+            <h2 className="text-xl font-bold text-[#FBF3E5] flex items-center gap-3">
               <span className="w-1.5 h-6 bg-primary rounded-full inline-block"></span>
               Episodes
             </h2>

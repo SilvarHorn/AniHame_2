@@ -195,7 +195,7 @@ export const ServerOrderManager: React.FC<ServerOrderManagerProps> = ({
                 </span>
 
                 <div className="flex items-center min-w-0">
-                  <span className="text-sm font-bold text-[#EDF1F5] truncate">
+                  <span className="text-sm font-bold text-[#FBF3E5] truncate">
                     {meta.name}
                   </span>
                 </div>

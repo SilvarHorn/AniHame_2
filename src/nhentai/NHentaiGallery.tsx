@@ -266,7 +266,7 @@ export default function NHentaiGallery() {
         </div>
 
         {/* Details */}
-        <div className="flex-1 mt-4 md:mt-16 text-[#EDF1F5] max-w-4xl">
+        <div className="flex-1 mt-4 md:mt-16 text-[#FBF3E5] max-w-4xl">
           <h1 className="text-2xl md:text-3xl font-bold mb-3 leading-snug">
             {gallery.title?.english || gallery.title?.pretty}
           </h1>

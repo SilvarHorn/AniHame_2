@@ -1310,7 +1310,75 @@ app.post("/api/anilist", async (req, res) => {
 });
 
 // -----------------------------------------------------------------------------
-// GET /api/mal/anime/:malId - High-Speed MAL Metadata (Mapping + Kitsu + Jikan)
+// GET /api/mal/scores?ids=1,2,3 - Batch MAL Scores for Fast Card Rendering
+// -----------------------------------------------------------------------------
+app.get("/api/mal/scores", async (req, res) => {
+  const idsParam = req.query.ids as string;
+  if (!idsParam) return res.json({});
+  const rawIds = idsParam.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0);
+  const ids = Array.from(new Set(rawIds)).slice(0, 50);
+
+  const scores: Record<number, number> = {};
+  const missing: number[] = [];
+
+  for (const id of ids) {
+    const cachedDetails = getCached(`mal_details_${id}`);
+    if (cachedDetails && cachedDetails.score != null) {
+      scores[id] = cachedDetails.score;
+    } else {
+      const cachedScore = getCached(`mal_score_only_${id}`);
+      if (cachedScore != null) {
+        scores[id] = cachedScore;
+      } else {
+        missing.push(id);
+      }
+    }
+  }
+
+  if (missing.length > 0) {
+    const resolveScore = async (malId: number) => {
+      try {
+        const jikanRes = await rateLimitedJikanGet(`https://api.jikan.moe/v4/anime/${malId}`, 3000);
+        if (jikanRes?.data?.data?.score) {
+          const s = jikanRes.data.data.score;
+          scores[malId] = s;
+          setCached(`mal_score_only_${malId}`, s, 1000 * 60 * 60 * 12);
+          return;
+        }
+      } catch {}
+
+      try {
+        const malRes = await axios.get(`https://myanimelist.net/anime/${malId}`, {
+          timeout: 4000,
+          validateStatus: () => true,
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+        });
+        if (malRes.status === 200) {
+          const $ = cheerio.load(malRes.data);
+          const scoreText = $('span[itemprop="ratingValue"]').text().trim() || $('.score-label').first().text().trim();
+          const parsed = parseFloat(scoreText);
+          if (!isNaN(parsed) && parsed > 0) {
+            scores[malId] = parsed;
+            setCached(`mal_score_only_${malId}`, parsed, 1000 * 60 * 60 * 12);
+          }
+        }
+      } catch {}
+    };
+
+    const chunks: number[][] = [];
+    for (let i = 0; i < missing.length; i += 6) {
+      chunks.push(missing.slice(i, i + 6));
+    }
+    for (const chunk of chunks) {
+      await Promise.all(chunk.map(id => resolveScore(id)));
+    }
+  }
+
+  return res.json(scores);
+});
+
+// -----------------------------------------------------------------------------
+// GET /api/mal/anime/:malId - High-Speed MAL Metadata (Mapping + Kitsu + Jikan + Scrape)
 // -----------------------------------------------------------------------------
 app.get("/api/mal/anime/:malId", async (req, res) => {
   const malId = parseInt(req.params.malId, 10);
@@ -1336,41 +1404,49 @@ app.get("/api/mal/anime/:malId", async (req, res) => {
       let resolvedRating: string | null = null;
       let resolvedTags: any[] = [];
 
-      // 2. Try Kitsu Mapping (instant, reliable, no 504)
-      try {
-        const kitsuRes = await axios.get(`https://kitsu.io/api/edge/mappings?filter[externalSite]=myanimelist/anime&filter[externalId]=${malId}&include=item,item.categories`, {
-          timeout: 3000
-        });
-        const item = kitsuRes.data?.included?.find((x: any) => x.type === 'anime') || kitsuRes.data?.included?.[0];
-        if (item && item.attributes) {
-          resolvedTitle = item.attributes.canonicalTitle || item.attributes.titles?.en || '';
-          if (item.attributes.subtype) {
-            resolvedType = item.attributes.subtype.toUpperCase();
-          }
-          if (item.attributes.averageRating) {
-            resolvedKitsuScore = parseFloat(item.attributes.averageRating);
-          }
-          if (item.attributes.ageRating) {
-            let r = item.attributes.ageRating;
-            if (item.attributes.ageRatingGuide) {
-              r += ` (${item.attributes.ageRatingGuide})`;
+      // Check if score-only cache exists
+      const cachedScore = getCached(`mal_score_only_${malId}`);
+      if (cachedScore != null) {
+        resolvedScore = cachedScore;
+      }
+
+      // 2. Try Kitsu Direct Item if mapping has kitsu_id
+      if (mapping?.kitsu_id) {
+        try {
+          const kitsuRes = await axios.get(`https://kitsu.io/api/edge/anime/${mapping.kitsu_id}?include=categories`, {
+            timeout: 3000
+          });
+          const item = kitsuRes.data?.data;
+          if (item?.attributes) {
+            resolvedTitle = item.attributes.canonicalTitle || item.attributes.titles?.en || '';
+            if (item.attributes.subtype) {
+              resolvedType = item.attributes.subtype.toUpperCase();
             }
-            resolvedRating = r;
+            if (item.attributes.averageRating) {
+              resolvedKitsuScore = parseFloat(item.attributes.averageRating);
+            }
+            if (item.attributes.ageRating) {
+              let r = item.attributes.ageRating;
+              if (item.attributes.ageRatingGuide) {
+                r += ` (${item.attributes.ageRatingGuide})`;
+              }
+              resolvedRating = r;
+            }
           }
-        }
-        const categories = kitsuRes.data?.included?.filter((x: any) => x.type === 'categories') || [];
-        if (categories.length > 0) {
-          resolvedTags = categories.map((c: any) => ({
-            name: c.attributes?.title || c.attributes?.name,
-            isMediaSpoiler: false
-          })).filter((t: any) => Boolean(t.name));
-        }
-      } catch {}
+          const categories = kitsuRes.data?.included?.filter((x: any) => x.type === 'categories') || [];
+          if (categories.length > 0) {
+            resolvedTags = categories.map((c: any) => ({
+              name: c.attributes?.title || c.attributes?.name,
+              isMediaSpoiler: false
+            })).filter((t: any) => Boolean(t.name));
+          }
+        } catch {}
+      }
 
       // 3. Try Jikan if title, score or rating still missing
       if (!resolvedTitle || resolvedScore === null || !resolvedRating) {
         try {
-          const jikanRes = await rateLimitedJikanGet(`https://api.jikan.moe/v4/anime/${malId}`, 2500);
+          const jikanRes = await rateLimitedJikanGet(`https://api.jikan.moe/v4/anime/${malId}`, 3500);
           if (jikanRes && jikanRes.status === 200 && jikanRes.data?.data) {
             const d = jikanRes.data.data;
             if (!resolvedTitle) resolvedTitle = d.title || d.title_english || '';
@@ -1384,21 +1460,33 @@ app.get("/api/mal/anime/:malId", async (req, res) => {
         } catch {}
       }
 
-      // 4. Try MAL Scrape fallback if needed
-      if (!resolvedTitle) {
+      // 4. Try MAL Scrape fallback if score, title or rating still missing
+      if (resolvedScore === null || !resolvedTitle || !resolvedRating) {
         try {
           const malRes = await axios.get(`https://myanimelist.net/anime/${malId}`, {
-            timeout: 4000,
+            timeout: 4500,
             validateStatus: () => true,
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
           });
           if (malRes.status === 200) {
             const $ = cheerio.load(malRes.data);
-            resolvedTitle = $('meta[property="og:title"]').attr('content') || $('h1.title-name strong').text().trim();
+            if (!resolvedTitle) {
+              resolvedTitle = $('meta[property="og:title"]').attr('content') || $('h1.title-name strong').text().trim();
+            }
+            if (resolvedScore === null) {
+              const scoreText = $('span[itemprop="ratingValue"]').text().trim() || $('.score-label').first().text().trim();
+              const parsed = parseFloat(scoreText);
+              if (!isNaN(parsed) && parsed > 0) {
+                resolvedScore = parsed;
+              }
+            }
             $('div.spaceit_pad').each((_, el) => {
               const text = $(el).text();
-              if (text.includes('Type:')) {
+              if (text.includes('Type:') && !resolvedType) {
                 resolvedType = $(el).find('a').text().trim() || text.replace('Type:', '').trim();
+              }
+              if (text.includes('Rating:') && !resolvedRating) {
+                resolvedRating = text.replace('Rating:', '').trim();
               }
             });
           }
@@ -1414,6 +1502,9 @@ app.get("/api/mal/anime/:malId", async (req, res) => {
         tags: resolvedTags
       };
       setCached(cacheKey, result, 1000 * 60 * 60 * 12); // 12 hours
+      if (resolvedScore != null) {
+        setCached(`mal_score_only_${malId}`, resolvedScore, 1000 * 60 * 60 * 12);
+      }
       return result;
     });
 

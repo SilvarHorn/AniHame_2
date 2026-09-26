@@ -90,7 +90,7 @@ export default function Navbar() {
 
   const getMobileNavClass = (path: string) => {
     const isActive = path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
-    return `px-3 py-2 rounded-lg text-sm tracking-wide transition-colors ${isActive ? 'bg-primary/10 text-primary font-bold' : 'text-[#EDF1F5] font-bold hover:text-primary hover:bg-white/5'}`;
+    return `px-3 py-2 rounded-lg text-sm tracking-wide transition-colors ${isActive ? 'bg-primary/10 text-primary font-bold' : 'text-[#FBF3E5] font-bold hover:text-primary hover:bg-white/5'}`;
   };
 
 
@@ -160,7 +160,7 @@ export default function Navbar() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onFocus={() => setShowPreview(true)}
                     onBlur={() => setTimeout(() => setShowPreview(false), 200)}
-                    className="bg-[#0B0C0F] border border-gray-700 rounded-full px-4 py-1.5 text-xs w-64 focus:border-primary outline-none text-[#EDF1F5] placeholder-gray-500"
+                    className="bg-[#0B0C0F] border border-gray-700 rounded-full px-4 py-1.5 text-xs w-64 focus:border-primary outline-none text-[#FBF3E5] placeholder-gray-500"
                   />
                   <Search className="absolute right-3 top-1.5 text-gray-400 pointer-events-none" size={14} />
                 </form>
@@ -171,7 +171,7 @@ export default function Navbar() {
                        <Link key={anime.id} to={`/anime/${anime.id}`} className="flex items-center gap-3 p-2 hover:bg-white/5 border-b border-gray-800 last:border-0 transition-colors">
                          <img src={anime.coverImage.large} className="w-8 h-10 object-cover rounded" />
                          <div className="flex-1 min-w-0">
-                           <div className="text-xs font-bold text-[#EDF1F5] truncate">{isHanimeMode() ? (anime.title.romaji || anime.title.english) : (anime.title.english || anime.title.romaji)}</div>
+                           <div className="text-xs font-bold text-[#FBF3E5] truncate">{isHanimeMode() ? (anime.title.romaji || anime.title.english) : (anime.title.english || anime.title.romaji)}</div>
                            <div className="text-[10px] text-gray-500 truncate">{anime.genres?.[0]}</div>
                          </div>
                        </Link>
@@ -205,7 +205,7 @@ export default function Navbar() {
               ) : (
                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center text-[10px] font-bold text-[#0B0C0F]">ME</div>
               )}
-              <span className="text-xs font-semibold text-[#EDF1F5] group-hover:text-primary transition-colors truncate max-w-[100px]">{displayUsername}</span>
+              <span className="text-xs font-semibold text-[#FBF3E5] group-hover:text-primary transition-colors truncate max-w-[100px]">{displayUsername}</span>
             </Link>
           </div>
 
@@ -273,7 +273,7 @@ export default function Navbar() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={() => setShowPreview(true)}
                 onBlur={() => setTimeout(() => setShowPreview(false), 200)}
-                className="w-full bg-[#0B0C0F] text-[#EDF1F5] rounded-full py-2 px-4 focus:outline-none focus:border-primary border border-gray-700 text-sm"
+                className="w-full bg-[#0B0C0F] text-[#FBF3E5] rounded-full py-2 px-4 focus:outline-none focus:border-primary border border-gray-700 text-sm"
               />
               <Search className="absolute right-4 top-2.5 text-gray-400" size={16} />
             </form>
@@ -283,7 +283,7 @@ export default function Navbar() {
                    <Link key={anime.id} to={`/anime/${anime.id}`} onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-3 p-2 hover:bg-white/5 border-b border-gray-800 last:border-0 transition-colors">
                      <img src={anime.coverImage.large} className="w-10 h-14 object-cover rounded" />
                      <div className="flex-1 min-w-0">
-                       <div className="text-sm font-bold text-[#EDF1F5] truncate">{isHanimeMode() ? (anime.title.romaji || anime.title.english) : (anime.title.english || anime.title.romaji)}</div>
+                       <div className="text-sm font-bold text-[#FBF3E5] truncate">{isHanimeMode() ? (anime.title.romaji || anime.title.english) : (anime.title.english || anime.title.romaji)}</div>
                        <div className="text-xs text-gray-500 truncate">{anime.genres?.join(', ')}</div>
                      </div>
                    </Link>

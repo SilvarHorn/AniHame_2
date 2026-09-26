@@ -91,10 +91,10 @@ export default React.memo(function Timetable() {
             >
               <div className="w-12 text-center shrink-0">
                 <div className="text-[10px] font-bold text-gray-500 group-hover:text-gray-400">{dayName}</div>
-                <div className="text-xs font-black text-[#EDF1F5]">{time}</div>
+                <div className="text-xs font-black text-[#FBF3E5]">{time}</div>
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-xs font-bold text-[#EDF1F5] truncate group-hover:text-primary transition-colors">
+                <div className="text-xs font-bold text-[#FBF3E5] truncate group-hover:text-primary transition-colors">
                   {isHanimeMode() ? (item.media.title.romaji || item.media.title.english) : (item.media.title.english || item.media.title.romaji)}
                 </div>
                 <div className="text-[10px] text-primary truncate">

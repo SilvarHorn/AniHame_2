@@ -148,7 +148,7 @@ function AnimeCardComponent({
       <div className="p-3 pt-2 pb-4 flex flex-col gap-1 z-10 relative bg-[#0F1115]">
         <MarqueeText
           text={title}
-          className="text-[11px] font-bold text-[#EDF1F5] group-hover:text-primary transition-colors"
+          className="text-[11px] font-bold text-[#FBF3E5] group-hover:text-primary transition-colors"
           align="left"
           hoverOnly={true}
           isHovered={isHovered}

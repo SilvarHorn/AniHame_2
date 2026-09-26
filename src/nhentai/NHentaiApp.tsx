@@ -84,7 +84,7 @@ function NHentaiCard({ gallery, batchReady = true }: { gallery: any; key?: any; 
       <div className="p-3 pt-2 pb-4 flex flex-col gap-1 z-10 relative bg-[#0F1115]">
         <MarqueeText
           text={title}
-          className="text-[11px] font-bold text-[#EDF1F5] group-hover:text-primary transition-colors"
+          className="text-[11px] font-bold text-[#FBF3E5] group-hover:text-primary transition-colors"
           align="left"
           hoverOnly={true}
           isHovered={isHovered}
@@ -218,7 +218,7 @@ function NHentaiHome() {
   return (
     <div className="max-w-[1600px] mx-auto px-4 md:px-6 py-6 md:py-8 min-h-screen">
       <div className="mb-10 flex flex-col items-center text-center">
-        <h1 className="text-3xl md:text-4xl font-black text-[#EDF1F5] mb-6 tracking-tight">
+        <h1 className="text-3xl md:text-4xl font-black text-[#FBF3E5] mb-6 tracking-tight">
           Explore <span className="text-primary">NHentai</span>
         </h1>
         
@@ -230,7 +230,7 @@ function NHentaiHome() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search translated galleries..."
-              className="w-full bg-[#151F2E] border border-gray-700 text-[#EDF1F5] rounded-xl pl-12 pr-4 py-3 focus:outline-none focus:border-primary transition-colors placeholder:text-gray-500"
+              className="w-full bg-[#151F2E] border border-gray-700 text-[#FBF3E5] rounded-xl pl-12 pr-4 py-3 focus:outline-none focus:border-primary transition-colors placeholder:text-gray-500"
             />
           </div>
           <button type="submit" className="bg-primary hover:bg-primary/90 text-[#0B0C0F] px-8 py-3 rounded-xl font-bold transition-colors">
@@ -316,14 +316,14 @@ function NHentaiHome() {
               <button 
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="px-6 py-3 bg-[#151F2E] border border-gray-700 disabled:opacity-50 text-[#EDF1F5] rounded-xl hover:border-primary/50 transition-colors font-bold"
+                className="px-6 py-3 bg-[#151F2E] border border-gray-700 disabled:opacity-50 text-[#FBF3E5] rounded-xl hover:border-primary/50 transition-colors font-bold"
               >
                 Previous
               </button>
               <span className="text-gray-400 font-medium">Page <span className="text-white">{page}</span></span>
               <button 
                 onClick={() => setPage(p => p + 1)}
-                className="px-6 py-3 bg-[#151F2E] border border-gray-700 text-[#EDF1F5] rounded-xl hover:border-primary/50 transition-colors font-bold"
+                className="px-6 py-3 bg-[#151F2E] border border-gray-700 text-[#FBF3E5] rounded-xl hover:border-primary/50 transition-colors font-bold"
               >
                 Next Page
               </button>

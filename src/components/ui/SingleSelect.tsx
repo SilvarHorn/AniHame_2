@@ -35,7 +35,7 @@ export default function SingleSelect({ options, value, onChange, placeholder = "
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center justify-between min-w-[140px] h-[42px] bg-[#151F2E] border border-gray-700 hover:border-primary/50 transition-colors text-[#EDF1F5] text-sm rounded-md px-3 focus:outline-none focus:border-primary"
+        className="flex w-full items-center justify-between min-w-[140px] h-[42px] bg-[#151F2E] border border-gray-700 hover:border-primary/50 transition-colors text-[#FBF3E5] text-sm rounded-md px-3 focus:outline-none focus:border-primary"
       >
         <span className="truncate pr-2">
           {selectedOption ? selectedOption.label : placeholder}
