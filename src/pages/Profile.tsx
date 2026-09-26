@@ -32,7 +32,7 @@ export default function Profile() {
   const [localAvatar, setLocalAvatar] = useState('');
   
   // Preferences state
-  const [defaultServer, setDefaultServer] = useState<'mal' | 'megaplayz' | 'anime' | 'animepahe' | 'tryembed' | 'kozo' | 'vidsrc'>('mal');
+  const [defaultServer, setDefaultServer] = useState<'mal' | 'megaplayz' | 'vidc' | 'anime' | 'animepahe' | 'tryembed' | 'kozo' | 'vidsrc'>('mal');
   const [defaultAudio, setDefaultAudio] = useState<'sub' | 'dub'>('sub');
   const [showEpisodeDate, setShowEpisodeDate] = useState<boolean>(true);
   const [serverOrder, setServerOrder] = useState<WatchServerType[]>(DEFAULT_SERVER_ORDER);
@@ -790,6 +790,7 @@ export default function Profile() {
               <SingleSelect
                 options={[
                   { label: 'Megaplay', value: 'mal' },
+                  { label: 'VidC', value: 'vidc' },
                   { label: 'Anime', value: 'anime' },
                   { label: 'AnimePahe', value: 'animepahe' },
                   { label: 'Try', value: 'tryembed' },
@@ -797,7 +798,7 @@ export default function Profile() {
                   { label: 'VidSrc', value: 'vidsrc' }
                 ]}
                 value={defaultServer}
-                onChange={(val) => { setDefaultServer(val as 'mal' | 'megaplayz' | 'anime' | 'animepahe' | 'tryembed' | 'kozo' | 'vidsrc'); if(!isEditing) setIsEditing(true); }}
+                onChange={(val) => { setDefaultServer(val as 'mal' | 'megaplayz' | 'vidc' | 'anime' | 'animepahe' | 'tryembed' | 'kozo' | 'vidsrc'); if(!isEditing) setIsEditing(true); }}
               />
             </div>
 

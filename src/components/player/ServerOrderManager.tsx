@@ -13,6 +13,10 @@ export const SERVER_METAS: Record<WatchServerType, ServerMeta> = {
     id: 'mal',
     name: 'Megaplay'
   },
+  vidc: {
+    id: 'vidc',
+    name: 'VidC'
+  },
   anime: {
     id: 'anime',
     name: 'Anime'

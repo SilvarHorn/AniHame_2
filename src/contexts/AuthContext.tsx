@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
-export type WatchServerType = 'mal' | 'anime' | 'animepahe' | 'tryembed' | 'kozo' | 'vidsrc';
+export type WatchServerType = 'mal' | 'vidc' | 'anime' | 'animepahe' | 'tryembed' | 'kozo' | 'vidsrc';
 
 export interface CardBorderPreferences {
   mode: 'default' | 'custom';
@@ -10,6 +10,7 @@ export interface CardBorderPreferences {
 
 export const DEFAULT_SERVER_ORDER: WatchServerType[] = [
   'mal',
+  'vidc',
   'anime',
   'animepahe',
   'tryembed',
@@ -24,7 +25,7 @@ export const DEFAULT_CARD_BORDER: CardBorderPreferences = {
 };
 
 export interface UserPreferences {
-  defaultServer: 'mal' | 'megaplayz' | 'vidsrc' | 'zhentube' | 'anime' | 'animepahe' | 'tryembed' | 'kozo';
+  defaultServer: 'mal' | 'megaplayz' | 'vidsrc' | 'zhentube' | 'anime' | 'animepahe' | 'tryembed' | 'kozo' | 'vidc';
   defaultAudio: 'sub' | 'dub';
   showEpisodeDate?: boolean;
   serverOrder?: WatchServerType[];

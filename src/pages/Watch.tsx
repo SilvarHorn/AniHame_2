@@ -27,13 +27,14 @@ export default function Watch() {
         const parsed = JSON.parse(stored);
         const pref = parsed?.preferences?.defaultServer;
         if (pref === 'megaplayz') return 'mal';
-        if (pref && ['mal', 'anime', 'animepahe', 'tryembed', 'kozo', 'vidsrc'].includes(pref)) {
+        if (pref && ['mal', 'vidc', 'anime', 'animepahe', 'tryembed', 'kozo', 'vidsrc'].includes(pref)) {
           return pref as WatchServerType;
         }
       }
     } catch (e) {}
     return 'mal';
   });
+  const [vidcUseMal, setVidcUseMal] = useState(false);
   const [isServerOrderModalOpen, setIsServerOrderModalOpen] = useState(false);
   const activeAnimeIdRef = useRef<number | null>(null);
   const manualServerChoiceRef = useRef<WatchServerType | null>(null);
@@ -66,7 +67,7 @@ export default function Watch() {
   const resolvedDefaultServer = React.useMemo<WatchServerType>(() => {
     const raw = profile?.preferences?.defaultServer;
     if (raw === 'megaplayz') return 'mal';
-    if (raw && (['mal', 'anime', 'animepahe', 'tryembed', 'kozo', 'vidsrc'] as string[]).includes(raw)) {
+    if (raw && (['mal', 'vidc', 'anime', 'animepahe', 'tryembed', 'kozo', 'vidsrc'] as string[]).includes(raw)) {
       return raw as WatchServerType;
     }
     return 'mal';
@@ -81,6 +82,7 @@ export default function Watch() {
       // Moved to a different anime (or initial anime load in this session)
       activeAnimeIdRef.current = animeId;
       manualServerChoiceRef.current = null; // Clear manual override!
+      setVidcUseMal(false);
       setServerType(resolvedDefaultServer);
     } else {
       // Still on the same anime (e.g. changing episodes)
@@ -89,6 +91,10 @@ export default function Watch() {
       }
     }
   }, [animeId, resolvedDefaultServer]);
+
+  useEffect(() => {
+    setVidcUseMal(false);
+  }, [animeId, currentEp]);
 
   // Synchronize audio preferences
   useEffect(() => {
@@ -99,6 +105,9 @@ export default function Watch() {
 
   const handleSelectServer = (chosenServer: WatchServerType) => {
     manualServerChoiceRef.current = chosenServer;
+    if (chosenServer !== 'vidc') {
+      setVidcUseMal(false);
+    }
     setServerType(chosenServer);
   };
 
@@ -437,6 +446,18 @@ export default function Watch() {
     } else {
       iframeUrl = appendPlaybackParams(`https://vidsrc2.ru/embed/tv/${safeImdb}/1/${safeEpisode}`);
     }
+  } else if (serverType === 'vidc') {
+    const rawMalId = anime?.idMal || malId;
+    const malIdForStream = rawMalId ? encodeURIComponent(String(rawMalId).trim().replace(/[^a-zA-Z0-9_-]/g, '')) : '';
+    if (vidcUseMal && malIdForStream) {
+      iframeUrl = `https://vidcloud.sbs/embed/mal/${malIdForStream}/${safeEpisode}?track=${safeAudio}&autoSkip=1&autoNext=1`;
+    } else if (anilistIdForStream) {
+      iframeUrl = `https://vidcloud.sbs/embed/ani/${anilistIdForStream}/${safeEpisode}?track=${safeAudio}&autoSkip=1`;
+    } else if (malIdForStream) {
+      iframeUrl = `https://vidcloud.sbs/embed/mal/${malIdForStream}/${safeEpisode}?track=${safeAudio}&autoSkip=1&autoNext=1`;
+    } else {
+      iframeUrl = '';
+    }
   } else if (serverType === 'kozo') {
     const rawMalId = anime?.idMal || animeId;
     const malId = encodeURIComponent(String(rawMalId).trim().replace(/[^a-zA-Z0-9_-]/g, ''));
@@ -486,6 +507,12 @@ export default function Watch() {
   };
 
   const handleIframeError = () => {
+    const rawMalId = anime?.idMal || malId;
+    if (serverType === 'vidc' && !vidcUseMal && rawMalId) {
+      setVidcUseMal(true);
+      return;
+    }
+
     const currentIndex = serverOrder.indexOf(serverType as WatchServerType);
     if (currentIndex >= 0 && currentIndex < serverOrder.length - 1) {
       const nextServer = serverOrder[currentIndex + 1];
@@ -605,6 +632,22 @@ export default function Watch() {
                     onError={handleIframeError}
                     onLoad={handleIframeLoad}
                   ></iframe>
+                ) : serverType === 'vidc' ? (
+                  <iframe 
+                    key={`vidc-${currentEp}-${audioType}-${vidcUseMal ? 'mal' : 'ani'}`}
+                    src={iframeUrl}
+                    width="100%"
+                    height="100%"
+                    frameBorder="0"
+                    scrolling="no"
+                    loading="lazy"
+                    allowFullScreen
+                    allow="autoplay; fullscreen; picture-in-picture"
+                    className="absolute inset-0 w-full h-full border-none"
+                    title={`Watch ${anime.title.romaji} Episode ${currentEp}`}
+                    onError={handleIframeError}
+                    onLoad={handleIframeLoad}
+                  ></iframe>
                 ) : (
                   <iframe 
                     key={`${serverType}-${currentEp}-${audioType}`}
@@ -638,8 +681,9 @@ export default function Watch() {
                       : 'Please select an alternate server below to begin playback.'}
                   </p>
                   <div className="flex flex-wrap gap-2 justify-center">
-                    {serverOrder.filter(s => s !== 'mal' && (s !== 'vidsrc' || imdbId)).slice(0, 3).map(srv => {
+                    {serverOrder.filter(s => s !== 'mal' && (s !== 'vidsrc' || imdbId)).slice(0, 4).map(srv => {
                       const names: Record<string, string> = {
+                        vidc: 'VidC',
                         anime: 'Anime',
                         animepahe: 'AnimePahe',
                         tryembed: 'Try',
@@ -728,6 +772,22 @@ export default function Watch() {
                           title={!anime?.idMal ? "MyAnimeList ID not available for this anime on Megaplay" : undefined}
                         >
                           Megaplay
+                        </button>
+                      );
+                    }
+                    if (srv === 'vidc') {
+                      return (
+                        <button
+                          key="vidc"
+                          type="button"
+                          onClick={() => handleSelectServer('vidc')}
+                          disabled={!anime?.id && !animeId && !anime?.idMal && !malId}
+                          className={cn(
+                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                            serverType === 'vidc' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                          )}
+                        >
+                          VidC
                         </button>
                       );
                     }
@@ -822,8 +882,36 @@ export default function Watch() {
                   </button>
                 </div>
               )}
+              {/* VidC ID Mode Selector (AniList / MAL) */}
+              {serverType === 'vidc' && (anime?.idMal || malId) && (anime?.id || animeId) && (
+                <div className="flex items-center bg-gray-800 rounded-lg p-1 w-full sm:w-auto justify-center mt-2 sm:mt-0">
+                  <button
+                    type="button"
+                    onClick={() => setVidcUseMal(false)}
+                    className={cn(
+                      "flex-1 sm:flex-none px-3 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors",
+                      !vidcUseMal ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                    )}
+                    title="Stream with AniList ID"
+                  >
+                    AniList
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVidcUseMal(true)}
+                    className={cn(
+                      "flex-1 sm:flex-none px-3 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors",
+                      vidcUseMal ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                    )}
+                    title="Stream with MyAnimeList ID"
+                  >
+                    MAL
+                  </button>
+                </div>
+              )}
+
               {/* Audio Type Selector */}
-              {(serverType === 'mal' || serverType === 'kozo' || serverType === 'anime' || serverType === 'animepahe' || serverType === 'tryembed') && (
+              {(serverType === 'mal' || serverType === 'vidc' || serverType === 'kozo' || serverType === 'anime' || serverType === 'animepahe' || serverType === 'tryembed') && (
                 <div className="flex items-center bg-gray-800 rounded-lg p-1 w-full sm:w-auto justify-center mt-2 sm:mt-0">
                   <button
                     onClick={() => setAudioType('sub')}
