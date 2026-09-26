@@ -5,7 +5,6 @@ import { Star, Play, Film } from 'lucide-react';
 import { AnimeMedia } from '../../types';
 import { MarqueeText } from '../MarqueeText';
 import { useAuth } from '../../contexts/AuthContext';
-import { useMalScore } from '../../utils/malScore';
 
 interface AnimeCardProps {
   key?: React.Key;
@@ -27,7 +26,6 @@ function AnimeCardComponent({
 }: AnimeCardProps) {
   const [isHovered, setIsHovered] = React.useState(false);
   const { profile } = useAuth();
-  const { formattedScore, isMal } = useMalScore(anime);
 
   const isLandscape = orientation === 'landscape';
   const imageSrc = (isLandscape && anime.bannerImage ? anime.bannerImage : (anime.coverImage?.large || anime.coverImage?.extraLarge || anime.coverImage?.medium || '')) || '';
@@ -136,15 +134,12 @@ function AnimeCardComponent({
           </div>
         </div>
         
-        {/* Rating - Shows MyAnimeList score in format "X.XX" (or AniList score/10 in "X.XX") */}
-        {formattedScore && (
-          <div 
-            className="absolute top-2 left-2 bg-[#050505]/90 backdrop-blur-md px-2 py-1 rounded-lg flex items-center gap-1.5 shadow-lg border border-white/5"
-            title={isMal ? `MyAnimeList: ${formattedScore}` : `Score: ${formattedScore}`}
-          >
+        {/* Rating - Position unchanged (top-left) as requested, but styled to match the image's pill */}
+        {anime.averageScore && (
+          <div className="absolute top-2 left-2 bg-[#050505]/90 backdrop-blur-md px-2 py-1 rounded-lg flex items-center gap-1.5 shadow-lg border border-white/5">
             <Star size={12} fill="currentColor" className="text-primary" />
             <span className="text-[11px] font-black text-primary leading-none mt-[1px]">
-              {formattedScore}
+              {(anime.averageScore / 10).toFixed(1)}
             </span>
           </div>
         )}
@@ -170,9 +165,6 @@ function AnimeCardComponent({
 export default memo(AnimeCardComponent, (prevProps, nextProps) => {
   return (
     prevProps.anime.id === nextProps.anime.id &&
-    prevProps.anime.idMal === nextProps.anime.idMal &&
-    prevProps.anime.malScore === nextProps.anime.malScore &&
-    prevProps.anime.averageScore === nextProps.anime.averageScore &&
     prevProps.showProgress === nextProps.showProgress &&
     prevProps.progressEpisode === nextProps.progressEpisode &&
     prevProps.orientation === nextProps.orientation &&

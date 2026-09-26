@@ -4,7 +4,6 @@ import { Link } from 'react-router-dom';
 import { AnimeMedia } from '../../types';
 import { Star, MonitorPlay, Calendar, Clock, PlayCircle, Info } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { requestMalScore, setMalScoreInCache } from '../../utils/malScore';
 
 export function AnimeInfo({
   anime,
@@ -24,15 +23,9 @@ export function AnimeInfo({
   const title = isHanimeMode() ? (anime.title.romaji || anime.title.english) : (anime.title.english || anime.title.romaji);
   
   const [kitsuScore, setKitsuScore] = useState<number | null>(initialKitsuScore || null);
-  const [malScore, setMalScore] = useState<number | null>(() => {
-    if (initialMalScore != null && !isNaN(initialMalScore)) return initialMalScore;
-    if (anime.malScore != null && !isNaN(anime.malScore)) return anime.malScore;
-    if (anime.idMal) {
-      const cached = requestMalScore(anime.idMal);
-      if (cached != null) return cached;
-    }
-    return null;
-  });
+  const [malScore, setMalScore] = useState<number | null>(
+    initialMalScore || (anime.averageScore ? Number((anime.averageScore / 10).toFixed(1)) : null)
+  );
   const [ageRating, setAgeRating] = useState<string | null>(initialAgeRating || null);
   const [showAllTags, setShowAllTags] = useState(false);
 
@@ -56,11 +49,8 @@ export function AnimeInfo({
   }, [initialKitsuScore]);
 
   useEffect(() => {
-    if (initialMalScore !== undefined && initialMalScore !== null) {
-      setMalScore(initialMalScore);
-      if (anime.idMal) setMalScoreInCache(anime.idMal, initialMalScore);
-    }
-  }, [initialMalScore, anime.idMal]);
+    if (initialMalScore !== undefined) setMalScore(initialMalScore);
+  }, [initialMalScore]);
 
   useEffect(() => {
     if (initialAgeRating !== undefined) setAgeRating(initialAgeRating);
@@ -75,9 +65,8 @@ export function AnimeInfo({
       .then(res => res.ok ? res.json() : null)
       .then(data => {
         if (!data) return;
-        if (data.score) {
+        if (data.score && !initialMalScore) {
           setMalScore(data.score);
-          setMalScoreInCache(anime.idMal!, data.score);
         }
         if (data.kitsuScore && !initialKitsuScore) {
           setKitsuScore(data.kitsuScore);
@@ -87,7 +76,7 @@ export function AnimeInfo({
         }
       })
       .catch(() => {});
-  }, [anime.idMal, initialKitsuScore, initialMalScore, initialAgeRating, kitsuScore, malScore, ageRating]);
+  }, [anime.idMal, initialKitsuScore, initialMalScore, initialAgeRating]);
 
   const formatFuzzyDate = (date?: { year: number | null; month: number | null; day: number | null }) => {
     if (!date || !date.year) return null;
@@ -148,12 +137,12 @@ export function AnimeInfo({
           </>
         )}
 
-        {malScore != null && !isNaN(Number(malScore)) && (
+        {malScore && (
           <>
             <div className="w-1.5 h-1.5 rounded-full bg-gray-600" />
-            <div className="flex items-center gap-1.5 text-[#5383E8] drop-shadow-sm font-semibold">
+            <div className="flex items-center gap-1.5 text-[#5383E8] drop-shadow-sm">
               <Star size={16} fill="currentColor" />
-              <span>MAL: {Number(malScore).toFixed(2)}</span>
+              <span>MAL: {malScore}</span>
             </div>
           </>
         )}

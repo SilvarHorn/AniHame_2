@@ -19,7 +19,6 @@ export interface NextAiringEpisode {
 export interface AnimeMedia {
   id: number;
   idMal?: number;
-  malScore?: number;
   type?: string;
   format?: string;
   title: AnimeTitle;

@@ -6,20 +6,6 @@ import Fade from 'embla-carousel-fade';
 import { AnimeMedia } from '../../types';
 import { Play, Info } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useMalScore } from '../../utils/malScore';
-
-function BannerScoreBadge({ anime }: { anime: AnimeMedia }) {
-  const { formattedScore, isMal } = useMalScore(anime);
-  if (!formattedScore) return null;
-  return (
-    <span 
-      className="text-primary text-xs font-semibold drop-shadow-md"
-      title={isMal ? `MyAnimeList Score: ${formattedScore}` : `Score: ${formattedScore}`}
-    >
-      ★ {formattedScore} Score
-    </span>
-  );
-}
 
 interface BannerProps {
   trending: AnimeMedia[];
@@ -85,7 +71,11 @@ export default React.memo(function Banner({ trending }: BannerProps) {
                       <span className="bg-primary text-[#0B0C0F] text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">
                         TRENDING #{index + 1}
                       </span>
-                      <BannerScoreBadge anime={anime} />
+                      {anime.averageScore && (
+                        <span className="text-primary text-xs font-semibold drop-shadow-md">
+                          ★ {(anime.averageScore / 10).toFixed(1)} Score
+                        </span>
+                      )}
                     </div>
                     
                     <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-2 line-clamp-2 leading-tight drop-shadow-lg">

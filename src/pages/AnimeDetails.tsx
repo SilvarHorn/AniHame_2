@@ -11,7 +11,6 @@ import { getAnimeListStatus, addOrUpdateToList, removeFromList, MyListStatus } f
 import { useAuth } from '../contexts/AuthContext';
 import AnimeCard from '../components/ui/AnimeCard';
 import { preloadAnimeThumbnails } from '../utils/imagePreload';
-import { requestMalScore, setMalScoreInCache } from '../utils/malScore';
 
 function RangeGridSelect({ value, onChange, options }: { value: string, onChange: (v: string)=>void, options: string[] }) {
   const [isOpen, setIsOpen] = React.useState(false);
@@ -163,17 +162,12 @@ export default function AnimeDetails() {
               const malId = data.Media.idMal || (mapping?.mal_id ? Number(mapping.mal_id) : null);
               if (malId) {
                 setMalId(malId);
-                const cachedScore = requestMalScore(malId);
-                if (cachedScore) setMalScore(cachedScore);
                 // 1. Fetch metadata (score, age rating, type) via server proxy with 12h cache
                 fetch(`/api/mal/anime/${malId}`)
                   .then(res => res.ok ? res.json() : null)
                   .then(meta => {
                     if (meta) {
-                      if (meta.score) {
-                        setMalScore(meta.score);
-                        setMalScoreInCache(malId, meta.score);
-                      }
+                      if (meta.score) setMalScore(meta.score);
                       if (meta.kitsuScore) setKitsuScore(meta.kitsuScore);
                       if (meta.rating) setAgeRating(meta.rating);
                       if (meta.title && isHanimeMode()) setMalTitle(meta.title);
@@ -485,7 +479,7 @@ export default function AnimeDetails() {
                   className="w-full bg-[#2E51A2]/10 hover:bg-[#2E51A2]/20 text-[#5383E8] border border-[#2E51A2]/30 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors text-sm"
                 >
                   <ExternalLink size={16} />
-                  MyAnimeList {malScore != null && !isNaN(Number(malScore)) ? `• ${Number(malScore).toFixed(2)}` : ''}
+                  MyAnimeList
                 </a>
               )}
               {imdbId && (
