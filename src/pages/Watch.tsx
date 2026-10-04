@@ -978,7 +978,7 @@ export default function Watch() {
         </div>
 
         {/* Right Side: Episodes Section */}
-        <div className="w-full sm:max-w-[400px] md:max-w-[450px] lg:max-w-none mx-auto lg:mx-0 lg:w-[320px] xl:w-[360px] shrink-0 flex flex-col">
+        <div className="w-full sm:max-w-[400px] md:max-w-[450px] lg:max-w-none mx-auto lg:mx-0 lg:w-[320px] xl:w-[360px] shrink-0 flex flex-col bg-[#10141d]/25 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-2xl">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-[#FBF3E5] flex items-center gap-3">
               <span className="w-1.5 h-6 bg-primary rounded-full inline-block"></span>
@@ -988,14 +988,14 @@ export default function Watch() {
             <div className="flex gap-2">
               <button 
                 onClick={() => setIsListView(!isListView)}
-                className="p-1.5 text-gray-400 hover:text-primary transition-colors bg-gray-800 rounded-lg border border-white/5"
+                className="p-1.5 text-gray-400 hover:text-primary transition-colors bg-white/[0.06] hover:bg-white/[0.12] rounded-lg border border-white/10"
                 title="Toggle View Mode"
               >
                 {isListView ? <LayoutGrid size={16} /> : <ListIcon size={16} />}
               </button>
               <button 
                 onClick={() => setSortDesc(!sortDesc)}
-                className="p-1.5 text-gray-400 hover:text-primary transition-colors bg-gray-800 rounded-lg border border-white/5"
+                className="p-1.5 text-gray-400 hover:text-primary transition-colors bg-white/[0.06] hover:bg-white/[0.12] rounded-lg border border-white/10"
                 title="Sort Order"
               >
                 <ArrowDownUp size={16} />
@@ -1007,14 +1007,14 @@ export default function Watch() {
             <div className="mb-4 relative" ref={dropdownRef}>
               <button
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                className="w-full flex items-center justify-between bg-gray-800 border border-white/5 text-gray-300 rounded-lg p-2.5 text-sm font-medium hover:bg-gray-700 transition-colors"
+                className="w-full flex items-center justify-between bg-white/[0.06] border border-white/10 text-gray-300 rounded-lg p-2.5 text-sm font-medium hover:bg-white/[0.1] transition-colors"
               >
                 <span>Episodes {chunks.find(c => c.index === episodeChunk)?.label}</span>
                 <ChevronDown size={16} className={cn("transition-transform", isDropdownOpen && "rotate-180")} />
               </button>
               
               {isDropdownOpen && (
-                <div className="mt-2 p-2 bg-gray-800 border border-white/5 rounded-lg shadow-xl grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-64 overflow-y-auto custom-scrollbar">
+                <div className="mt-2 p-2 bg-[#10141d]/85 backdrop-blur-xl border border-white/10 rounded-lg shadow-xl grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-64 overflow-y-auto custom-scrollbar z-30">
                   {chunks.map(chunk => (
                     <button
                       key={chunk.index}
@@ -1025,8 +1025,8 @@ export default function Watch() {
                       className={cn(
                         "px-2 py-1.5 text-xs font-semibold rounded-lg border transition-all text-center",
                         episodeChunk === chunk.index
-                          ? "bg-primary border-primary text-white"
-                          : "bg-gray-900 border-white/5 text-gray-400 hover:bg-gray-700 hover:text-gray-200"
+                          ? "bg-primary border-primary text-[#0B0C0F]"
+                          : "bg-white/[0.06] border-white/5 text-gray-300 hover:bg-white/[0.12] hover:text-white"
                       )}
                     >
                       {chunk.label}
@@ -1037,12 +1037,13 @@ export default function Watch() {
             </div>
           )}
           
-          <div className={cn(
-            "gap-2 overflow-y-auto custom-scrollbar px-1 lg:max-h-[calc(100vh-12rem)] pb-4",
-            isListView 
-              ? "flex flex-col gap-3" 
-              : "grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-5"
-          )}>
+          <div className="flex-1 min-h-0 bg-black/15 border border-white/5 rounded-xl p-2">
+            <div className={cn(
+              "gap-2 overflow-y-auto custom-scrollbar px-1 max-h-[500px] lg:max-h-[calc(100vh-17rem)] pb-2",
+              isListView 
+                ? "flex flex-col gap-2.5" 
+                : "grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-4 xl:grid-cols-5"
+            )}>
           {episodes.map(epNum => {
             const isFiller = fillerEpisodes.includes(epNum);
             const isWatched = watchedEpisodes.includes(epNum) && epNum !== currentEp;
@@ -1053,10 +1054,10 @@ export default function Watch() {
                 className={cn(
                   "flex items-center gap-4 hover:border-primary/50 border rounded-xl p-3 lg:min-h-[100px] lg:p-4 font-bold text-sm transition-all shadow-lg group relative overflow-hidden",
                   epNum === currentEp 
-                    ? "border-primary/50 ring-1 ring-primary/50 bg-gray-800" 
+                    ? "border-primary/50 ring-1 ring-primary/50 bg-primary/15 backdrop-blur-sm" 
                     : isFiller 
                       ? "bg-[#f97316]/10 hover:bg-[#f97316]/20 border-[#f97316]/30"
-                      : "bg-gray-800 hover:bg-gray-700 border-white/5 text-gray-300",
+                      : "bg-white/[0.04] hover:bg-white/[0.09] border-white/5 text-gray-300",
                   isWatched && "opacity-50 grayscale hover:grayscale-0 hover:opacity-100"
                 )}
               >
@@ -1093,10 +1094,10 @@ export default function Watch() {
                 className={cn(
                   "relative aspect-square flex-col text-center border rounded-xl flex items-center justify-center transition-all hover:scale-105 hover:-translate-y-1 shadow-lg overflow-hidden group",
                   epNum === currentEp 
-                    ? "border-primary ring-1 ring-primary bg-gray-800" 
+                    ? "border-primary ring-1 ring-primary bg-primary/20 backdrop-blur-sm" 
                     : isFiller
                       ? "bg-[#f97316]/20 border-[#f97316]/50"
-                      : "bg-gray-800 hover:border-primary border-white/5",
+                      : "bg-white/[0.04] hover:bg-white/[0.09] hover:border-primary border-white/5",
                   isWatched && "opacity-50 grayscale hover:grayscale-0 hover:opacity-100"
                 )}
               >
@@ -1132,8 +1133,9 @@ export default function Watch() {
               </Link>
             )
           })}
+            </div>
+          </div>
         </div>
-      </div>
 
       <div className="block lg:hidden mt-8 mb-8">
         <AnimeInfo anime={anime} />

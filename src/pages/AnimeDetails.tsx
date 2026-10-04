@@ -512,7 +512,7 @@ export default function AnimeDetails() {
               />
             </div>
             {/* Episodes Section */}
-            <div>
+            <div className="bg-[#10141d]/25 backdrop-blur-xl border border-white/10 rounded-2xl p-4 sm:p-6 shadow-2xl">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                 <h2 className="text-2xl font-bold text-[#FBF3E5] flex items-center gap-3">
                   <span className="w-1.5 h-6 bg-primary rounded-full inline-block"></span>
@@ -531,14 +531,14 @@ export default function AnimeDetails() {
                   )}
                   <button 
                     onClick={() => setIsListView(!isListView)}
-                    className="p-2 text-gray-400 hover:text-primary transition-colors bg-gray-800 rounded-lg border border-white/5 h-[38px] w-[38px] flex items-center justify-center"
+                    className="p-2 text-gray-400 hover:text-primary transition-colors bg-white/[0.06] hover:bg-white/[0.12] rounded-lg border border-white/10 h-[38px] w-[38px] flex items-center justify-center"
                     title="Toggle View Mode"
                   >
                     {isListView ? <LayoutGrid size={18} /> : <ListIcon size={18} />}
                   </button>
                   <button 
                     onClick={() => setSortDesc(!sortDesc)}
-                    className="p-2 text-gray-400 hover:text-primary transition-colors bg-gray-800 rounded-lg border border-white/5 h-[38px] w-[38px] flex items-center justify-center"
+                    className="p-2 text-gray-400 hover:text-primary transition-colors bg-white/[0.06] hover:bg-white/[0.12] rounded-lg border border-white/10 h-[38px] w-[38px] flex items-center justify-center"
                     title="Sort Order"
                   >
                     <ArrowDownUp size={18} />
@@ -568,7 +568,7 @@ export default function AnimeDetails() {
                           to={`/watch/${anime.id}/${ep}`}
                           className={cn(
                             "flex items-center gap-4 hover:border-primary/50 border rounded-xl p-3 font-bold text-sm transition-all shadow-lg group relative overflow-hidden",
-                            isFiller ? "bg-[#f97316]/10 hover:bg-[#f97316]/20 border-[#f97316]/30 text-[#f97316]" : "bg-gray-800 hover:bg-gray-700 border-white/5 text-gray-300",
+                            isFiller ? "bg-[#f97316]/10 hover:bg-[#f97316]/20 border-[#f97316]/30 text-[#f97316]" : "bg-white/[0.04] hover:bg-white/[0.09] border-white/5 text-gray-300",
                             isWatched && "opacity-50 grayscale hover:grayscale-0 hover:opacity-100"
                           )}
                         >
@@ -604,7 +604,7 @@ export default function AnimeDetails() {
                           to={`/watch/${anime.id}/${ep}`}
                           className={cn(
                             "relative aspect-video flex-col text-center hover:border-primary border rounded-xl flex items-center justify-center transition-all hover:scale-105 hover:-translate-y-1 shadow-lg overflow-hidden group",
-                            isFiller ? "bg-[#f97316]/20 border-[#f97316]/50" : "bg-gray-800 border-white/5",
+                            isFiller ? "bg-[#f97316]/20 border-[#f97316]/50" : "bg-white/[0.04] hover:bg-white/[0.09] border-white/5",
                             isWatched && "opacity-50 grayscale hover:grayscale-0 hover:opacity-100"
                           )}
                         >
