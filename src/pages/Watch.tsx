@@ -612,7 +612,7 @@ export default function Watch() {
         )}
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 mb-12">
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-5 mb-12 items-start">
         {/* Left Side: Video Player */}
         <div className="flex-1 flex flex-col gap-4 min-w-0">
           <div className="w-full bg-black rounded-xl overflow-hidden shadow-2xl shadow-black/50 border border-white/5 flex flex-col aspect-video shrink-0">
@@ -962,12 +962,15 @@ export default function Watch() {
             </div>
           </div>
 
+          <div className="hidden lg:block mt-4">
+            <AnimeInfo anime={anime} />
+          </div>
         </div>
 
-        {/* Right Side: Episodes Section (compact, minimum space beside video player) */}
-        <div className="w-full lg:w-[240px] xl:w-[260px] shrink-0 self-start flex flex-col bg-[#10141d]/25 backdrop-blur-xl border border-white/10 rounded-2xl p-3 shadow-2xl">
+        {/* Right Side: Episodes Section */}
+        <div className="w-full sm:max-w-[380px] md:max-w-[400px] lg:max-w-none mx-auto lg:mx-0 lg:w-[310px] xl:w-[330px] shrink-0 flex flex-col bg-[#10141d]/25 backdrop-blur-xl border border-white/10 rounded-2xl p-3 sm:p-3.5 shadow-2xl lg:self-start">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-base sm:text-lg font-bold text-[#FBF3E5] flex items-center gap-2">
+            <h2 className="text-lg sm:text-xl font-bold text-[#FBF3E5] flex items-center gap-2.5">
               <span className="w-1.5 h-5 bg-primary rounded-full inline-block"></span>
               Episodes
             </h2>
@@ -978,20 +981,20 @@ export default function Watch() {
                 className="p-1.5 text-gray-400 hover:text-primary transition-colors bg-white/[0.06] hover:bg-white/[0.12] rounded-lg border border-white/10"
                 title="Toggle View Mode"
               >
-                {isListView ? <LayoutGrid size={15} /> : <ListIcon size={15} />}
+                {isListView ? <LayoutGrid size={16} /> : <ListIcon size={16} />}
               </button>
               <button 
                 onClick={() => setSortDesc(!sortDesc)}
                 className="p-1.5 text-gray-400 hover:text-primary transition-colors bg-white/[0.06] hover:bg-white/[0.12] rounded-lg border border-white/10"
                 title="Sort Order"
               >
-                <ArrowDownUp size={15} />
+                <ArrowDownUp size={16} />
               </button>
             </div>
           </div>
           
           {totalChunks > 1 && (
-            <div className="mb-2.5 relative" ref={dropdownRef}>
+            <div className="mb-3 relative" ref={dropdownRef}>
               <button
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                 className="w-full flex items-center justify-between bg-white/[0.06] border border-white/10 text-gray-300 rounded-lg p-2 text-xs sm:text-sm font-medium hover:bg-white/[0.1] transition-colors"
@@ -1001,7 +1004,7 @@ export default function Watch() {
               </button>
               
               {isDropdownOpen && (
-                <div className="mt-2 p-2 bg-[#10141d]/90 backdrop-blur-xl border border-white/10 rounded-lg shadow-xl grid grid-cols-3 gap-1.5 max-h-60 overflow-y-auto custom-scrollbar z-30">
+                <div className="mt-2 p-2 bg-[#10141d]/90 backdrop-blur-xl border border-white/10 rounded-lg shadow-xl grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-60 overflow-y-auto custom-scrollbar z-30">
                   {chunks.map(chunk => (
                     <button
                       key={chunk.index}
@@ -1010,7 +1013,7 @@ export default function Watch() {
                         setIsDropdownOpen(false);
                       }}
                       className={cn(
-                        "px-1.5 py-1 text-[11px] font-semibold rounded-lg border transition-all text-center",
+                        "px-2 py-1.5 text-xs font-semibold rounded-lg border transition-all text-center",
                         episodeChunk === chunk.index
                           ? "bg-primary border-primary text-[#0B0C0F]"
                           : "bg-white/[0.06] border-white/5 text-gray-300 hover:bg-white/[0.12] hover:text-white"
@@ -1024,12 +1027,12 @@ export default function Watch() {
             </div>
           )}
           
-          <div className="flex-1 min-h-0 bg-black/15 border border-white/5 rounded-xl p-1.5">
+          <div className="flex-1 min-h-0 bg-black/15 border border-white/5 rounded-xl p-1.5 sm:p-2">
             <div className={cn(
-              "gap-1.5 overflow-y-auto custom-scrollbar px-0.5 max-h-[380px] lg:max-h-[440px] pb-1",
+              "gap-1.5 sm:gap-2 overflow-y-auto custom-scrollbar px-0.5 max-h-[380px] lg:max-h-[400px] pb-1",
               isListView 
                 ? "flex flex-col gap-2" 
-                : "grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-4"
+                : "grid grid-cols-5"
             )}>
           {episodes.map(epNum => {
             const isFiller = fillerEpisodes.includes(epNum);
@@ -1039,7 +1042,7 @@ export default function Watch() {
                 key={epNum}
                 to={`/watch/${anime.id}/${epNum}`}
                 className={cn(
-                  "flex items-center gap-3 hover:border-primary/50 border rounded-xl p-2 font-bold text-xs transition-all shadow-md group relative overflow-hidden",
+                  "flex items-center gap-4 hover:border-primary/50 border rounded-xl p-3 lg:min-h-[100px] lg:p-4 font-bold text-sm transition-all shadow-lg group relative overflow-hidden",
                   epNum === currentEp 
                     ? "border-primary/50 ring-1 ring-primary/50 bg-primary/15 backdrop-blur-sm" 
                     : isFiller 
@@ -1048,7 +1051,7 @@ export default function Watch() {
                   isWatched && "opacity-50 grayscale hover:grayscale-0 hover:opacity-100"
                 )}
               >
-                <div className="w-16 sm:w-20 aspect-video flex-shrink-0 relative rounded-lg overflow-hidden bg-gray-900">
+                <div className="w-24 sm:w-32 lg:w-40 aspect-video flex-shrink-0 relative rounded-lg overflow-hidden bg-gray-900">
                   <img 
                     src={episodeThumbMap.get(epNum) || anime.bannerImage || anime.coverImage.extraLarge || anime.coverImage.large} 
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
@@ -1057,29 +1060,29 @@ export default function Watch() {
                   {isFiller && <div className="absolute inset-0 bg-[#f97316]/20 pointer-events-none mix-blend-color" />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex flex-col gap-0.5 mb-0.5">
-                    <div className="flex items-center gap-1.5">
-                      <span className={cn("text-sm font-black leading-tight shrink-0", epNum === currentEp ? "text-primary" : isFiller ? "text-[#f97316]" : "text-white")}>Ep {epNum}</span>
-                      {isFiller && <span className="text-[9px] px-1 py-0.2 rounded bg-[#f97316]/20 text-[#f97316] border border-[#f97316]/30 font-bold shrink-0">FILLER</span>}
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mb-1">
+                    <div className="flex items-center gap-2">
+                      <span className={cn("text-lg font-black leading-tight shrink-0", epNum === currentEp ? "text-primary" : isFiller ? "text-[#f97316]" : "text-white")}>Ep {epNum}</span>
+                      {isFiller && <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full bg-[#f97316]/20 text-[#f97316] border border-[#f97316]/30 font-bold tracking-wider shrink-0">FILLER</span>}
                     </div>
                     <MarqueeText 
                       text={episodeTitleMap.get(epNum) || `Episode ${epNum}`}
-                      className={cn("text-[11px] font-medium transition-colors", isFiller ? "text-[#f97316]/80 group-hover:text-[#f97316]" : "text-gray-400 group-hover:text-white")}
+                      className={cn("text-xs sm:text-sm font-medium transition-colors", isFiller ? "text-[#f97316]/80 group-hover:text-[#f97316]" : "text-gray-400 group-hover:text-white")}
                       align="left"
                     />
                     {profile?.preferences?.showEpisodeDate !== false && episodeAiredMap.get(epNum) && (
-                      <div className="text-[9px] text-gray-500">{episodeAiredMap.get(epNum)}</div>
+                      <div className="text-[10px] text-gray-500 mt-0.5">{episodeAiredMap.get(epNum)}</div>
                     )}
                   </div>
                 </div>
-                <PlayCircle size={18} className={cn("mr-1 flex-shrink-0 transition-colors", epNum === currentEp ? "text-primary" : isFiller ? "text-[#f97316]/50 group-hover:text-[#f97316]" : "text-gray-500 group-hover:text-primary")} />
+                <PlayCircle size={24} className={cn("mr-2 flex-shrink-0 transition-colors", epNum === currentEp ? "text-primary" : isFiller ? "text-[#f97316]/50 group-hover:text-[#f97316]" : "text-gray-500 group-hover:text-primary")} />
               </Link>
             ) : (
               <Link
                 key={epNum}
                 to={`/watch/${anime.id}/${epNum}`}
                 className={cn(
-                  "relative aspect-square flex-col text-center border rounded-xl flex items-center justify-center transition-all hover:scale-105 hover:-translate-y-0.5 shadow-md overflow-hidden group",
+                  "relative aspect-square flex-col text-center border rounded-xl flex items-center justify-center transition-all hover:scale-105 hover:-translate-y-0.5 shadow-lg overflow-hidden group",
                   epNum === currentEp 
                     ? "border-primary ring-1 ring-primary bg-primary/20 backdrop-blur-sm" 
                     : isFiller
@@ -1097,24 +1100,24 @@ export default function Watch() {
                   <div className={cn("absolute inset-0 opacity-80", isFiller ? "bg-gradient-to-t from-[#f97316]/40 via-[#0B0C0F]/60 to-[#f97316]/10 mix-blend-color" : "bg-gradient-to-t from-[#0B0C0F] via-[#0B0C0F]/40 to-transparent")} />
                 </div>
                 
-                <div className="relative z-10 flex flex-col items-center justify-center w-full h-full p-1">
+                <div className="relative z-10 flex flex-col items-center justify-center w-full h-full p-1 sm:p-1.5">
                   <div className="absolute inset-0 flex flex-col items-center justify-center transition-all duration-300 group-hover:opacity-0 group-hover:scale-90">
                     <span className={cn(
-                      "text-base sm:text-lg font-black drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]",
+                      "text-xs sm:text-sm font-black drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]",
                       epNum === currentEp ? "text-primary" : isFiller ? "text-[#f97316]" : "text-white"
                     )}>
                       {epNum}
                     </span>
-                    {isFiller && <span className="text-[9px] font-bold text-[#f97316] bg-black/50 px-1 py-0.2 rounded mt-0.5">FIL</span>}
+                    {isFiller && <span className="text-[8px] sm:text-[9px] font-bold text-[#f97316] bg-black/60 px-1 py-0.2 rounded mt-0.5 leading-none">FILLER</span>}
                   </div>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center p-1.5 opacity-0 group-hover:opacity-100 transition-all duration-300 scale-105 group-hover:scale-100">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center p-1 opacity-0 group-hover:opacity-100 transition-all duration-300 scale-105 group-hover:scale-100">
                     <MarqueeText 
                       text={episodeTitleMap.get(epNum) || `Episode ${epNum}`}
-                      className={cn("text-[9px] font-medium drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] leading-tight", isFiller ? "text-[#f97316]" : "text-white")}
+                      className={cn("text-[9px] sm:text-[10px] font-bold text-center leading-tight", epNum === currentEp ? "text-primary" : isFiller ? "text-[#f97316]" : "text-white")}
                     />
-                    {profile?.preferences?.showEpisodeDate !== false && episodeAiredMap.get(epNum) && (
-                      <div className="text-[8px] text-gray-400 mt-0.5 opacity-80">{episodeAiredMap.get(epNum)}</div>
-                    )}
+                    <div className="flex items-center gap-0.5 text-[9px] text-gray-300 mt-0.5">
+                      <PlayCircle size={10} className="text-primary" />
+                    </div>
                   </div>
                 </div>
               </Link>
@@ -1123,10 +1126,8 @@ export default function Watch() {
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Anime Info: Full width beneath player & episodes */}
-      <div className="mt-8 mb-12">
+      <div className="block lg:hidden mt-8 mb-8">
         <AnimeInfo anime={anime} />
       </div>
 
@@ -1137,6 +1138,7 @@ export default function Watch() {
         onSave={handleSaveServerOrder}
       />
 
+      </div>
     </div>
   );
 }
