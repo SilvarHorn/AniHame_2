@@ -9,9 +9,17 @@ interface ServerMeta {
 }
 
 export const SERVER_METAS: Record<WatchServerType, ServerMeta> = {
-  mal: {
-    id: 'mal',
-    name: 'Megaplay'
+  filmu: {
+    id: 'filmu',
+    name: 'FilmU'
+  },
+  kozo: {
+    id: 'kozo',
+    name: 'Kozo'
+  },
+  tryembed: {
+    id: 'tryembed',
+    name: 'Try'
   },
   vidc: {
     id: 'vidc',
@@ -25,13 +33,9 @@ export const SERVER_METAS: Record<WatchServerType, ServerMeta> = {
     id: 'animepahe',
     name: 'AnimePahe'
   },
-  tryembed: {
-    id: 'tryembed',
-    name: 'Try'
-  },
-  kozo: {
-    id: 'kozo',
-    name: 'Kozo'
+  mal: {
+    id: 'mal',
+    name: 'Megaplay'
   },
   vidsrc: {
     id: 'vidsrc',

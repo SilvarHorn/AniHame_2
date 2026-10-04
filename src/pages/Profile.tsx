@@ -32,7 +32,7 @@ export default function Profile() {
   const [localAvatar, setLocalAvatar] = useState('');
   
   // Preferences state
-  const [defaultServer, setDefaultServer] = useState<'mal' | 'megaplayz' | 'vidc' | 'anime' | 'animepahe' | 'tryembed' | 'kozo' | 'vidsrc'>('mal');
+  const [defaultServer, setDefaultServer] = useState<WatchServerType>('filmu');
   const [defaultAudio, setDefaultAudio] = useState<'sub' | 'dub'>('sub');
   const [showEpisodeDate, setShowEpisodeDate] = useState<boolean>(true);
   const [serverOrder, setServerOrder] = useState<WatchServerType[]>(DEFAULT_SERVER_ORDER);
@@ -72,7 +72,7 @@ export default function Profile() {
     if (profile) {
       setLocalDisplayName(profile.displayName || 'User');
       setLocalAvatar(profile.photoURL || '');
-      setDefaultServer(profile.preferences?.defaultServer || 'mal');
+      setDefaultServer((profile.preferences?.defaultServer as WatchServerType) || 'filmu');
       setDefaultAudio(profile.preferences?.defaultAudio || 'sub');
       setShowEpisodeDate(profile.preferences?.showEpisodeDate ?? true);
       if (profile.preferences?.serverOrder) {
@@ -789,16 +789,17 @@ export default function Profile() {
               <label className="block text-sm font-medium text-gray-400 mb-3">Default Video Server</label>
               <SingleSelect
                 options={[
-                  { label: 'Megaplay', value: 'mal' },
+                  { label: 'FilmU', value: 'filmu' },
+                  { label: 'Kozo', value: 'kozo' },
+                  { label: 'Try', value: 'tryembed' },
                   { label: 'VidC', value: 'vidc' },
                   { label: 'Anime', value: 'anime' },
                   { label: 'AnimePahe', value: 'animepahe' },
-                  { label: 'Try', value: 'tryembed' },
-                  { label: 'Kozo', value: 'kozo' },
+                  { label: 'Megaplay', value: 'mal' },
                   { label: 'VidSrc', value: 'vidsrc' }
                 ]}
                 value={defaultServer}
-                onChange={(val) => { setDefaultServer(val as 'mal' | 'megaplayz' | 'vidc' | 'anime' | 'animepahe' | 'tryembed' | 'kozo' | 'vidsrc'); if(!isEditing) setIsEditing(true); }}
+                onChange={(val) => { setDefaultServer(val as WatchServerType); if(!isEditing) setIsEditing(true); }}
               />
             </div>
 

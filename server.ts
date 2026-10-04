@@ -1,14 +1,14 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import apiApp from "./api/index"; // Import the Express app
+import apiApp from "./api/index.ts"; // Import the Express app
 import helmet from "helmet";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
   // Trust the reverse proxy (required for rate limiting behind proxies like Cloud Run/Nginx)
   app.set("trust proxy", 1);

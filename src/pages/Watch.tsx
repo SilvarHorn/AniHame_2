@@ -27,12 +27,12 @@ export default function Watch() {
         const parsed = JSON.parse(stored);
         const pref = parsed?.preferences?.defaultServer;
         if (pref === 'megaplayz') return 'mal';
-        if (pref && ['mal', 'vidc', 'anime', 'animepahe', 'tryembed', 'kozo', 'vidsrc'].includes(pref)) {
+        if (pref && ['filmu', 'mal', 'vidc', 'anime', 'animepahe', 'tryembed', 'kozo', 'vidsrc'].includes(pref)) {
           return pref as WatchServerType;
         }
       }
     } catch (e) {}
-    return 'mal';
+    return 'filmu';
   });
   const [vidcUseMal, setVidcUseMal] = useState(false);
   const [isServerOrderModalOpen, setIsServerOrderModalOpen] = useState(false);
@@ -67,10 +67,10 @@ export default function Watch() {
   const resolvedDefaultServer = React.useMemo<WatchServerType>(() => {
     const raw = profile?.preferences?.defaultServer;
     if (raw === 'megaplayz') return 'mal';
-    if (raw && (['mal', 'vidc', 'anime', 'animepahe', 'tryembed', 'kozo', 'vidsrc'] as string[]).includes(raw)) {
+    if (raw && (['filmu', 'mal', 'vidc', 'anime', 'animepahe', 'tryembed', 'kozo', 'vidsrc'] as string[]).includes(raw)) {
       return raw as WatchServerType;
     }
-    return 'mal';
+    return 'filmu';
   }, [profile?.preferences?.defaultServer]);
 
   // Server lifecycle management:
@@ -439,7 +439,9 @@ export default function Watch() {
     return `${url}${delimiter}mute=0&auto_skip=0&autoskip=0`;
   };
 
-  if (serverType === 'vidsrc' && imdbId) {
+  if (serverType === 'filmu') {
+    iframeUrl = appendPlaybackParams(`https://embed.filmu.in/anime/${anilistIdForStream}/1/${safeEpisode}`);
+  } else if (serverType === 'vidsrc' && imdbId) {
     const safeImdb = encodeURIComponent(String(imdbId).trim().replace(/[^a-zA-Z0-9_-]/g, ''));
     if (anime?.format === 'MOVIE') {
       iframeUrl = appendPlaybackParams(`https://vidsrc2.ru/embed/movie/${safeImdb}`);
@@ -518,7 +520,7 @@ export default function Watch() {
       const nextServer = serverOrder[currentIndex + 1];
       handleSelectServer(nextServer);
     } else {
-      const fallback = serverOrder.find(s => s !== serverType && (s !== 'mal' || !!anime?.idMal)) || 'anime';
+      const fallback = serverOrder.find(s => s !== serverType && (s !== 'mal' || !!anime?.idMal)) || 'filmu';
       handleSelectServer(fallback);
     }
   };
@@ -683,11 +685,13 @@ export default function Watch() {
                   <div className="flex flex-wrap gap-2 justify-center">
                     {serverOrder.filter(s => s !== 'mal' && (s !== 'vidsrc' || imdbId)).slice(0, 4).map(srv => {
                       const names: Record<string, string> = {
+                        filmu: 'FilmU',
+                        kozo: 'Kozo',
+                        tryembed: 'Try',
                         vidc: 'VidC',
                         anime: 'Anime',
                         animepahe: 'AnimePahe',
-                        tryembed: 'Try',
-                        kozo: 'Kozo',
+                        mal: 'Megaplay',
                         vidsrc: 'VidSrc'
                       };
                       return (
@@ -758,6 +762,22 @@ export default function Watch() {
               {!isHanimeMode() && (
                 <div className="flex items-center bg-gray-800 rounded-lg p-1 w-full sm:w-auto justify-center flex-wrap sm:flex-nowrap gap-1 sm:gap-0">
                   {serverOrder.map((srv) => {
+                    if (srv === 'filmu') {
+                      return (
+                        <button
+                          key="filmu"
+                          type="button"
+                          onClick={() => handleSelectServer('filmu')}
+                          disabled={!anime?.id && !animeId}
+                          className={cn(
+                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                            serverType === 'filmu' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                          )}
+                        >
+                          FilmU
+                        </button>
+                      );
+                    }
                     if (srv === 'mal') {
                       return (
                         <button
@@ -911,7 +931,7 @@ export default function Watch() {
               )}
 
               {/* Audio Type Selector */}
-              {(serverType === 'mal' || serverType === 'vidc' || serverType === 'kozo' || serverType === 'anime' || serverType === 'animepahe' || serverType === 'tryembed') && (
+              {(serverType === 'filmu' || serverType === 'mal' || serverType === 'vidc' || serverType === 'kozo' || serverType === 'anime' || serverType === 'animepahe' || serverType === 'tryembed') && (
                 <div className="flex items-center bg-gray-800 rounded-lg p-1 w-full sm:w-auto justify-center mt-2 sm:mt-0">
                   <button
                     onClick={() => setAudioType('sub')}

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
-export type WatchServerType = 'mal' | 'vidc' | 'anime' | 'animepahe' | 'tryembed' | 'kozo' | 'vidsrc';
+export type WatchServerType = 'filmu' | 'kozo' | 'tryembed' | 'vidc' | 'anime' | 'animepahe' | 'mal' | 'vidsrc';
 
 export interface CardBorderPreferences {
   mode: 'default' | 'custom';
@@ -9,12 +9,13 @@ export interface CardBorderPreferences {
 }
 
 export const DEFAULT_SERVER_ORDER: WatchServerType[] = [
-  'mal',
+  'filmu',
+  'kozo',
+  'tryembed',
   'vidc',
   'anime',
   'animepahe',
-  'tryembed',
-  'kozo',
+  'mal',
   'vidsrc'
 ];
 
@@ -25,7 +26,7 @@ export const DEFAULT_CARD_BORDER: CardBorderPreferences = {
 };
 
 export interface UserPreferences {
-  defaultServer: 'mal' | 'megaplayz' | 'vidsrc' | 'zhentube' | 'anime' | 'animepahe' | 'tryembed' | 'kozo' | 'vidc';
+  defaultServer: 'filmu' | 'mal' | 'megaplayz' | 'vidsrc' | 'zhentube' | 'anime' | 'animepahe' | 'tryembed' | 'kozo' | 'vidc';
   defaultAudio: 'sub' | 'dub';
   showEpisodeDate?: boolean;
   serverOrder?: WatchServerType[];
@@ -54,7 +55,7 @@ interface AuthContextType {
 }
 
 const defaultPreferences: UserPreferences = {
-  defaultServer: 'mal',
+  defaultServer: 'filmu',
   defaultAudio: 'sub',
   serverOrder: DEFAULT_SERVER_ORDER,
   cardBorder: DEFAULT_CARD_BORDER,
@@ -93,6 +94,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         if (parsed.preferences?.cardBorder?.color === '#35D5BF' || parsed.preferences?.cardBorder?.color === '#8AD7D0') {
           parsed.preferences.cardBorder.color = '#FBF3E5';
+        }
+        if (!parsed.preferences?.defaultServer || parsed.preferences.defaultServer === 'mal' || parsed.preferences.defaultServer === 'megaplayz') {
+          parsed.preferences = { ...parsed.preferences, defaultServer: 'filmu' };
+        }
+        if (!parsed.preferences?.serverOrder || !parsed.preferences.serverOrder.includes('filmu')) {
+          parsed.preferences = { ...parsed.preferences, serverOrder: DEFAULT_SERVER_ORDER };
         }
         setProfile(parsed);
       } else {

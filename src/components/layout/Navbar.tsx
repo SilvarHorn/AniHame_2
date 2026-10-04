@@ -121,7 +121,7 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="fixed top-0 w-full z-50 bg-[#151F2E] border-b border-primary/10 h-14 shrink-0 flex flex-col justify-center">
+    <nav className="fixed top-0 w-full z-50 bg-black border-b border-white/10 h-14 shrink-0 flex flex-col justify-center">
       <div className="w-full px-4 sm:px-6 lg:px-8 w-full">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-8">
@@ -166,7 +166,7 @@ export default function Navbar() {
                 </form>
                               
                 {showPreview && previewResults.length > 0 && (
-                   <div className="absolute top-full mt-2 right-0 w-64 bg-[#151F2E] border border-primary/10 rounded-lg shadow-xl overflow-hidden z-50">
+                   <div className="absolute top-full mt-2 right-0 w-64 bg-black border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
                      {previewResults.map(anime => (
                        <Link key={anime.id} to={`/anime/${anime.id}`} className="flex items-center gap-3 p-2 hover:bg-white/5 border-b border-gray-800 last:border-0 transition-colors">
                          <img src={anime.coverImage.large} className="w-8 h-10 object-cover rounded" />
@@ -245,7 +245,7 @@ export default function Navbar() {
       </div>
 
       {!isNHentai && isMobileMenuOpen && (
-        <div className="md:hidden absolute top-14 left-0 w-full bg-[#151F2E] border-b border-primary/10 px-4 pt-4 pb-4 shadow-xl z-50">
+        <div className="md:hidden absolute top-14 left-0 w-full bg-black border-b border-white/10 px-4 pt-4 pb-4 shadow-xl z-50">
           <div className="flex flex-col gap-2 mb-4">
             <Link to="/" onClick={() => setIsMobileMenuOpen(false)} className={getMobileNavClass('/')}>Home</Link>
             <Link to="/explore" onClick={() => setIsMobileMenuOpen(false)} className={getMobileNavClass('/explore')}>Explore</Link>
@@ -278,7 +278,7 @@ export default function Navbar() {
               <Search className="absolute right-4 top-2.5 text-gray-400" size={16} />
             </form>
             {showPreview && previewResults.length > 0 && (
-               <div className="absolute top-full mt-2 left-0 w-full bg-[#151F2E] border border-primary/10 rounded-lg shadow-xl overflow-hidden z-50">
+               <div className="absolute top-full mt-2 left-0 w-full bg-black border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
                  {previewResults.map(anime => (
                    <Link key={anime.id} to={`/anime/${anime.id}`} onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-3 p-2 hover:bg-white/5 border-b border-gray-800 last:border-0 transition-colors">
                      <img src={anime.coverImage.large} className="w-10 h-14 object-cover rounded" />
