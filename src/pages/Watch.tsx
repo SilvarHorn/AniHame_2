@@ -711,163 +711,211 @@ export default function Watch() {
             </div>
           </div>
             
-          {/* Episode Controls */}
-          <div className="bg-[#10141d]/75 backdrop-blur-md p-3.5 sm:p-4 rounded-2xl border border-white/10 shrink-0 flex flex-col lg:flex-row items-center justify-between gap-4 shadow-xl">
-            {/* Left: Server and Audio Settings */}
-            <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full lg:w-auto justify-center lg:justify-start">
-              {/* Server Selector */}
-              {!isHanimeMode() && (
-                <div className="flex items-center bg-black/40 rounded-xl p-1 border border-white/5 w-full sm:w-auto justify-center flex-wrap sm:flex-nowrap gap-1">
-                  {serverOrder.map((srv) => {
-                    if (srv === 'filmu') {
-                      return (
-                        <button
-                          key="filmu"
-                          type="button"
-                          onClick={() => handleSelectServer('filmu')}
-                          disabled={!anime?.id && !animeId}
-                          className={cn(
-                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed",
-                            serverType === 'filmu' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
-                          )}
-                        >
-                          FilmU
-                        </button>
-                      );
-                    }
-                    if (srv === 'mal') {
-                      return (
-                        <button
-                          key="mal"
-                          type="button"
-                          onClick={() => handleSelectServer('mal')}
-                          disabled={!anime?.idMal}
-                          className={cn(
-                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed",
-                            serverType === 'mal' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
-                          )}
-                          title={!anime?.idMal ? "MyAnimeList ID not available for this anime on Megaplay" : undefined}
-                        >
-                          Megaplay
-                        </button>
-                      );
-                    }
-                    if (srv === 'vidc') {
-                      return (
-                        <button
-                          key="vidc"
-                          type="button"
-                          onClick={() => handleSelectServer('vidc')}
-                          disabled={!anime?.id && !animeId && !anime?.idMal && !malId}
-                          className={cn(
-                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed",
-                            serverType === 'vidc' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
-                          )}
-                        >
-                          VidC
-                        </button>
-                      );
-                    }
-                    if (srv === 'anime') {
-                      return (
-                        <button
-                          key="anime"
-                          onClick={() => handleSelectServer('anime')}
-                          disabled={!anime?.id && !animeId}
-                          className={cn(
-                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed",
-                            serverType === 'anime' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
-                          )}
-                        >
-                          Anime
-                        </button>
-                      );
-                    }
-                    if (srv === 'animepahe') {
-                      return (
-                        <button
-                          key="animepahe"
-                          onClick={() => handleSelectServer('animepahe')}
-                          disabled={!anime?.id && !animeId}
-                          className={cn(
-                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed",
-                            serverType === 'animepahe' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
-                          )}
-                        >
-                          AnimePahe
-                        </button>
-                      );
-                    }
-                    if (srv === 'tryembed') {
-                      return (
-                        <button
-                          key="tryembed"
-                          onClick={() => handleSelectServer('tryembed')}
-                          disabled={!anime?.id && !animeId}
-                          className={cn(
-                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed",
-                            serverType === 'tryembed' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
-                          )}
-                        >
-                          Try
-                        </button>
-                      );
-                    }
-                    if (srv === 'kozo') {
-                      return (
-                        <button
-                          key="kozo"
-                          onClick={() => handleSelectServer('kozo')}
-                          disabled={!anime?.idMal && !animeId}
-                          className={cn(
-                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed",
-                            serverType === 'kozo' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
-                          )}
-                          title={!anime?.idMal ? "MAL ID not available for this anime" : undefined}
-                        >
-                          Kozo
-                        </button>
-                      );
-                    }
-                    if (srv === 'vidsrc') {
-                      return (
-                        <button
-                          key="vidsrc"
-                          onClick={() => handleSelectServer('vidsrc')}
-                          disabled={!imdbId}
-                          className={cn(
-                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed",
-                            serverType === 'vidsrc' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
-                          )}
-                          title={!imdbId ? "IMDb ID not available for this anime" : undefined}
-                        >
-                          VidSrc
-                        </button>
-                      );
-                    }
-                    return null;
-                  })}
+          {/* Episode Navigation Bar: Next & Previous */}
+          <div className="bg-[#10141d]/75 backdrop-blur-md px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-2xl border border-white/10 shrink-0 flex items-center justify-between gap-3 shadow-lg mb-3">
+            {/* Previous Episode Button */}
+            {currentEp > 1 ? (
+              <Link
+                to={`/watch/${animeId}/${currentEp - 1}`}
+                className="flex items-center gap-2 px-3.5 sm:px-4 py-2 bg-white/[0.06] hover:bg-white/[0.12] hover:text-white text-gray-300 rounded-xl transition-all font-semibold text-xs sm:text-sm border border-white/10 active:scale-95 shadow-sm group"
+                title={`Previous Episode (${currentEp - 1})`}
+              >
+                <ChevronLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
+                <span>Previous Episode</span>
+              </Link>
+            ) : (
+              <div 
+                className="flex items-center gap-2 px-3.5 sm:px-4 py-2 bg-white/[0.02] text-gray-600 rounded-xl font-semibold text-xs sm:text-sm border border-white/5 cursor-not-allowed select-none opacity-40"
+                title="Already at first episode"
+              >
+                <ChevronLeft size={16} />
+                <span>Previous Episode</span>
+              </div>
+            )}
 
-                  {/* Open Arrange Server Modal */}
-                  <button
-                    type="button"
-                    onClick={() => setIsServerOrderModalOpen(true)}
-                    className="px-2.5 py-1.5 text-gray-400 hover:text-primary hover:bg-white/[0.06] rounded-lg transition-colors ml-0.5"
-                    title="Arrange Server List Order"
-                  >
-                    <SlidersHorizontal size={14} />
-                  </button>
-                </div>
-              )}
+            {/* Current Episode Indicator */}
+            <div className="text-xs sm:text-sm font-semibold text-gray-400 select-none">
+              Episode <span className="text-white font-black">{currentEp}</span>
+              {episodeCount > 0 && <span className="text-gray-500 font-normal"> of {episodeCount}</span>}
+            </div>
 
+            {/* Next Episode Button */}
+            {currentEp < Math.max(1, episodeCount) ? (
+              <Link
+                to={`/watch/${animeId}/${currentEp + 1}`}
+                className="flex items-center gap-2 px-4 sm:px-5 py-2 bg-primary hover:bg-primary-hover text-[#0B0C0F] rounded-xl transition-all font-bold text-xs sm:text-sm shadow-md shadow-primary/20 hover:shadow-primary/30 active:scale-95 group"
+                title={`Next Episode (${currentEp + 1})`}
+              >
+                <span>Next Episode</span>
+                <ChevronRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
+              </Link>
+            ) : (
+              <div 
+                className="flex items-center gap-2 px-4 sm:px-5 py-2 bg-white/[0.02] text-gray-600 rounded-xl font-bold text-xs sm:text-sm border border-white/5 cursor-not-allowed select-none opacity-40"
+                title="Already at latest episode"
+              >
+                <span>Next Episode</span>
+                <ChevronRight size={16} />
+              </div>
+            )}
+          </div>
+
+          {/* Server & Audio Settings Bar */}
+          <div className="bg-[#10141d]/50 backdrop-blur-md p-3 sm:p-3.5 rounded-2xl border border-white/10 shrink-0 flex flex-wrap items-center justify-between gap-3 shadow-md">
+            {/* Left: Server Selector */}
+            {!isHanimeMode() && (
+              <div className="flex items-center bg-black/40 rounded-xl p-1 border border-white/5 flex-wrap sm:flex-nowrap gap-1">
+                {serverOrder.map((srv) => {
+                  if (srv === 'filmu') {
+                    return (
+                      <button
+                        key="filmu"
+                        type="button"
+                        onClick={() => handleSelectServer('filmu')}
+                        disabled={!anime?.id && !animeId}
+                        className={cn(
+                          "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed",
+                          serverType === 'filmu' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
+                        )}
+                      >
+                        FilmU
+                      </button>
+                    );
+                  }
+                  if (srv === 'mal') {
+                    return (
+                      <button
+                        key="mal"
+                        type="button"
+                        onClick={() => handleSelectServer('mal')}
+                        disabled={!anime?.idMal}
+                        className={cn(
+                          "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed",
+                          serverType === 'mal' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
+                        )}
+                        title={!anime?.idMal ? "MyAnimeList ID not available for this anime on Megaplay" : undefined}
+                      >
+                        Megaplay
+                      </button>
+                    );
+                  }
+                  if (srv === 'vidc') {
+                    return (
+                      <button
+                        key="vidc"
+                        type="button"
+                        onClick={() => handleSelectServer('vidc')}
+                        disabled={!anime?.id && !animeId && !anime?.idMal && !malId}
+                        className={cn(
+                          "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed",
+                          serverType === 'vidc' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
+                        )}
+                      >
+                        VidC
+                      </button>
+                    );
+                  }
+                  if (srv === 'anime') {
+                    return (
+                      <button
+                        key="anime"
+                        onClick={() => handleSelectServer('anime')}
+                        disabled={!anime?.id && !animeId}
+                        className={cn(
+                          "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed",
+                          serverType === 'anime' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
+                        )}
+                      >
+                        Anime
+                      </button>
+                    );
+                  }
+                  if (srv === 'animepahe') {
+                    return (
+                      <button
+                        key="animepahe"
+                        onClick={() => handleSelectServer('animepahe')}
+                        disabled={!anime?.id && !animeId}
+                        className={cn(
+                          "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed",
+                          serverType === 'animepahe' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
+                        )}
+                      >
+                        AnimePahe
+                      </button>
+                    );
+                  }
+                  if (srv === 'tryembed') {
+                    return (
+                      <button
+                        key="tryembed"
+                        onClick={() => handleSelectServer('tryembed')}
+                        disabled={!anime?.id && !animeId}
+                        className={cn(
+                          "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed",
+                          serverType === 'tryembed' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
+                        )}
+                      >
+                        Try
+                      </button>
+                    );
+                  }
+                  if (srv === 'kozo') {
+                    return (
+                      <button
+                        key="kozo"
+                        onClick={() => handleSelectServer('kozo')}
+                        disabled={!anime?.idMal && !animeId}
+                        className={cn(
+                          "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed",
+                          serverType === 'kozo' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
+                        )}
+                        title={!anime?.idMal ? "MAL ID not available for this anime" : undefined}
+                      >
+                        Kozo
+                      </button>
+                    );
+                  }
+                  if (srv === 'vidsrc') {
+                    return (
+                      <button
+                        key="vidsrc"
+                        onClick={() => handleSelectServer('vidsrc')}
+                        disabled={!imdbId}
+                        className={cn(
+                          "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed",
+                          serverType === 'vidsrc' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
+                        )}
+                        title={!imdbId ? "IMDb ID not available for this anime" : undefined}
+                      >
+                        VidSrc
+                      </button>
+                    );
+                  }
+                  return null;
+                })}
+
+                {/* Open Arrange Server Modal */}
+                <button
+                  type="button"
+                  onClick={() => setIsServerOrderModalOpen(true)}
+                  className="px-2.5 py-1.5 text-gray-400 hover:text-primary hover:bg-white/[0.06] rounded-lg transition-colors ml-0.5"
+                  title="Arrange Server List Order"
+                >
+                  <SlidersHorizontal size={14} />
+                </button>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2 flex-wrap">
               {/* VidC ID Mode Selector (AniList / MAL) */}
               {serverType === 'vidc' && (anime?.idMal || malId) && (anime?.id || animeId) && (
-                <div className="flex items-center bg-black/40 rounded-xl p-1 border border-white/5 w-full sm:w-auto justify-center mt-1 sm:mt-0 gap-1">
+                <div className="flex items-center bg-black/40 rounded-xl p-1 border border-white/5 gap-1">
                   <button
                     type="button"
                     onClick={() => setVidcUseMal(false)}
                     className={cn(
-                      "flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all",
+                      "px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all",
                       !vidcUseMal ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
                     )}
                     title="Stream with AniList ID"
@@ -878,7 +926,7 @@ export default function Watch() {
                     type="button"
                     onClick={() => setVidcUseMal(true)}
                     className={cn(
-                      "flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all",
+                      "px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all",
                       vidcUseMal ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
                     )}
                     title="Stream with MyAnimeList ID"
@@ -890,11 +938,11 @@ export default function Watch() {
 
               {/* Audio Type Selector */}
               {(serverType === 'filmu' || serverType === 'mal' || serverType === 'vidc' || serverType === 'kozo' || serverType === 'anime' || serverType === 'animepahe' || serverType === 'tryembed') && (
-                <div className="flex items-center bg-black/40 rounded-xl p-1 border border-white/5 w-full sm:w-auto justify-center mt-1 sm:mt-0 gap-1">
+                <div className="flex items-center bg-black/40 rounded-xl p-1 border border-white/5 gap-1">
                   <button
                     onClick={() => setAudioType('sub')}
                     className={cn(
-                      "flex-1 sm:flex-none px-5 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all",
+                      "px-4 sm:px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all",
                       audioType === 'sub' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
                     )}
                   >
@@ -903,68 +951,12 @@ export default function Watch() {
                   <button
                     onClick={() => setAudioType('dub')}
                     className={cn(
-                      "flex-1 sm:flex-none px-5 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all",
+                      "px-4 sm:px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all",
                       audioType === 'dub' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
                     )}
                   >
                     Dub
                   </button>
-                </div>
-              )}
-            </div>
-
-            {/* Right: Unified Previous & Next Episode Navigation */}
-            <div className="flex items-center gap-2 w-full lg:w-auto justify-between lg:justify-end shrink-0 pt-2.5 lg:pt-0 border-t lg:border-t-0 border-white/5">
-              {/* Previous Episode Button */}
-              {currentEp > 1 ? (
-                <Link
-                  to={`/watch/${animeId}/${currentEp - 1}`}
-                  className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2 bg-white/[0.06] hover:bg-white/[0.12] hover:text-white text-gray-300 rounded-xl transition-all font-semibold text-xs sm:text-sm border border-white/10 active:scale-95 shadow-sm group"
-                  title={`Previous Episode (${currentEp - 1})`}
-                >
-                  <ChevronLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
-                  <span>Prev</span>
-                  <span className="hidden sm:inline">Episode</span>
-                </Link>
-              ) : (
-                <div 
-                  className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2 bg-white/[0.02] text-gray-600 rounded-xl font-semibold text-xs sm:text-sm border border-white/5 cursor-not-allowed select-none opacity-50"
-                  title="Already at first episode"
-                >
-                  <ChevronLeft size={16} />
-                  <span>Prev</span>
-                  <span className="hidden sm:inline">Episode</span>
-                </div>
-              )}
-
-              {/* Current Episode Badge */}
-              <div className="flex items-center gap-1.5 px-3 py-2 bg-black/40 border border-white/10 rounded-xl text-xs sm:text-sm font-bold text-gray-200 select-none">
-                <span className="text-gray-400 font-normal">Ep</span>
-                <span className="text-primary font-black">{currentEp}</span>
-                {episodeCount > 0 && (
-                  <span className="text-gray-500 font-normal text-xs">/ {episodeCount}</span>
-                )}
-              </div>
-
-              {/* Next Episode Button */}
-              {currentEp < Math.max(1, episodeCount) ? (
-                <Link
-                  to={`/watch/${animeId}/${currentEp + 1}`}
-                  className="flex items-center gap-1.5 px-4 sm:px-5 py-2 bg-primary hover:bg-primary-hover text-[#0B0C0F] rounded-xl transition-all font-bold text-xs sm:text-sm shadow-md shadow-primary/20 hover:shadow-primary/30 active:scale-95 group"
-                  title={`Next Episode (${currentEp + 1})`}
-                >
-                  <span>Next</span>
-                  <span className="hidden sm:inline">Episode</span>
-                  <ChevronRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
-                </Link>
-              ) : (
-                <div 
-                  className="flex items-center gap-1.5 px-4 sm:px-5 py-2 bg-white/[0.02] text-gray-600 rounded-xl font-bold text-xs sm:text-sm border border-white/5 cursor-not-allowed select-none opacity-50"
-                  title="Already at latest episode"
-                >
-                  <span>Next</span>
-                  <span className="hidden sm:inline">Episode</span>
-                  <ChevronRight size={16} />
                 </div>
               )}
             </div>
@@ -984,24 +976,6 @@ export default function Watch() {
             </h2>
             
             <div className="flex items-center gap-1.5">
-              {currentEp > 1 && (
-                <Link
-                  to={`/watch/${animeId}/${currentEp - 1}`}
-                  className="p-1.5 text-gray-400 hover:text-white hover:bg-white/[0.12] transition-colors bg-white/[0.06] rounded-lg border border-white/10"
-                  title={`Previous Episode (${currentEp - 1})`}
-                >
-                  <ChevronLeft size={16} />
-                </Link>
-              )}
-              {currentEp < Math.max(1, episodeCount) && (
-                <Link
-                  to={`/watch/${animeId}/${currentEp + 1}`}
-                  className="p-1.5 text-primary hover:bg-primary hover:text-[#0B0C0F] transition-colors bg-primary/10 rounded-lg border border-primary/25 font-bold"
-                  title={`Next Episode (${currentEp + 1})`}
-                >
-                  <ChevronRight size={16} />
-                </Link>
-              )}
               <button 
                 onClick={() => setIsListView(!isListView)}
                 className="p-1.5 text-gray-400 hover:text-primary transition-colors bg-white/[0.06] hover:bg-white/[0.12] rounded-lg border border-white/10"
