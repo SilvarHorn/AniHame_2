@@ -127,9 +127,13 @@ export const AIRING_SCHEDULE_QUERY = `
           format
           countryOfOrigin
           isAdult
+          genres
+          bannerImage
+          episodes
           title {
             romaji
             english
+            native
           }
           coverImage {
             large

@@ -14,7 +14,7 @@ export default React.memo(function Timetable() {
         if (parsed.defaultRegion !== undefined) return parsed.defaultRegion;
       }
     } catch (e) {}
-    return 'JP';
+    return '';
   };
 
   const [schedule, setSchedule] = useState<AiringSchedule[]>([]);
@@ -37,7 +37,16 @@ export default React.memo(function Timetable() {
         
         if (data?.Page?.airingSchedules) {
           const filtered = data.Page.airingSchedules.filter((s: any) => isHanimeMode() ? s.media?.isAdult : !s.media?.isAdult);
-          setSchedule(filtered);
+          const seen = new Set<string>();
+          const deduped: AiringSchedule[] = [];
+          for (const item of filtered) {
+            const key = `${item.media?.id}-${item.episode}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              deduped.push(item);
+            }
+          }
+          setSchedule(deduped);
         }
       } catch (err) {
         console.error('Error fetching schedule:', err);
@@ -60,7 +69,7 @@ export default React.memo(function Timetable() {
 
   if (loading && schedule.length === 0) return null;
 
-  const filteredSchedule = schedule.filter(item => country ? item.media.countryOfOrigin === country : true);
+  const filteredSchedule = schedule.filter(item => country ? (item.media.countryOfOrigin || 'JP') === country : true);
 
   return (
     <div className="bg-[#151F2E] rounded-xl border border-primary/10 flex flex-col p-3 h-full w-full min-h-0">

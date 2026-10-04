@@ -794,6 +794,9 @@ async function synthesizeAnilistFallback(body: any): Promise<any> {
 
     const matchedSchedules: any[] = [];
     for (const anime of scheduleItems) {
+      if (isAdult ? !anime.isAdult : anime.isAdult) continue;
+      if (variables.countryOfOrigin && anime.countryOfOrigin && anime.countryOfOrigin !== variables.countryOfOrigin) continue;
+
       const nodes = anime.airingSchedule?.nodes || [];
       for (const node of nodes) {
         if (node.airingAt >= gte && node.airingAt <= lte) {
@@ -806,9 +809,11 @@ async function synthesizeAnilistFallback(body: any): Promise<any> {
               format: anime.format || "TV",
               countryOfOrigin: anime.countryOfOrigin || "JP",
               isAdult: Boolean(anime.isAdult),
+              genres: anime.genres || [],
               title: {
                 romaji: anime.title?.romaji || anime.title?.english || "Unknown",
-                english: anime.title?.english || anime.title?.romaji || "Unknown"
+                english: anime.title?.english || anime.title?.romaji || "Unknown",
+                native: anime.title?.native || ""
               },
               coverImage: {
                 large: anime.coverImage?.extraLarge || anime.coverImage?.medium || "",
@@ -821,13 +826,20 @@ async function synthesizeAnilistFallback(body: any): Promise<any> {
     }
 
     matchedSchedules.sort((a, b) => a.airingAt - b.airingAt);
+    const page = Math.max(1, Number(variables.page) || 1);
     const limit = Math.min(Number(variables.perPage) || 50, 100);
+    const offset = (page - 1) * limit;
+    const paginated = matchedSchedules.slice(offset, offset + limit);
 
     return {
       data: {
         Page: {
-          pageInfo: { hasNextPage: matchedSchedules.length > limit },
-          airingSchedules: matchedSchedules.slice(0, limit)
+          pageInfo: {
+            hasNextPage: offset + limit < matchedSchedules.length,
+            currentPage: page,
+            total: matchedSchedules.length
+          },
+          airingSchedules: paginated
         }
       }
     };
@@ -1240,7 +1252,7 @@ app.post("/api/anilist", async (req, res) => {
       if (Date.now() > anilistCircuitBreakerUntil) {
         try {
           const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 1500);
+          const timeout = setTimeout(() => controller.abort(), 4000);
 
           const response = await fetch('https://graphql.anilist.co', {
             method: 'POST',
