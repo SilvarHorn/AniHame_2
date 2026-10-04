@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { fetchAnilist, ANIME_DETAILS_QUERY, isHanimeMode } from '../api/anilist';
 import { AnimeMedia } from '../types';
 import { saveProgress } from '../store/progress';
-import { ChevronLeft, ChevronDown, ArrowDownUp, LayoutGrid, List as ListIcon, PlayCircle, ExternalLink, SlidersHorizontal, Server } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, ArrowDownUp, LayoutGrid, List as ListIcon, PlayCircle, ExternalLink, SlidersHorizontal, Server } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth, WatchServerType, DEFAULT_SERVER_ORDER } from '../contexts/AuthContext';
 import { MarqueeText } from '../components/MarqueeText';
@@ -712,55 +712,12 @@ export default function Watch() {
           </div>
             
           {/* Episode Controls */}
-          <div className="flex flex-col lg:flex-row items-center justify-between bg-[#151F2E] p-4 rounded-xl border border-primary/10 shrink-0 gap-4">
-            {/* Mobile Nav: Prev / Next */}
-            <div className="flex lg:hidden items-center justify-between w-full">
-              {currentEp > 1 ? (
-                <Link
-                  to={`/watch/${animeId}/${currentEp - 1}`}
-                  className="px-4 py-2 bg-gray-800 hover:bg-primary hover:text-[#0B0C0F] text-gray-300 rounded-lg transition-colors font-bold text-sm"
-                >
-                  Prev
-                </Link>
-              ) : (
-                <div className="px-4 py-2 bg-gray-800/50 text-gray-500 rounded-lg font-bold text-sm cursor-not-allowed">
-                  Prev
-                </div>
-              )}
-              {currentEp < Math.max(1, episodeCount) ? (
-                <Link
-                  to={`/watch/${animeId}/${currentEp + 1}`}
-                  className="px-4 py-2 bg-gray-800 hover:bg-primary hover:text-[#0B0C0F] text-gray-300 rounded-lg transition-colors font-bold text-sm"
-                >
-                  Next
-                </Link>
-              ) : (
-                <div className="px-4 py-2 bg-gray-800/50 text-gray-500 rounded-lg font-bold text-sm cursor-not-allowed">
-                  Next
-                </div>
-              )}
-            </div>
-
-            {/* Desktop Nav: Prev */}
-            <div className="hidden lg:block">
-              {currentEp > 1 ? (
-                <Link
-                  to={`/watch/${animeId}/${currentEp - 1}`}
-                  className="px-4 py-2 bg-gray-800 hover:bg-primary hover:text-[#0B0C0F] text-gray-300 rounded-lg transition-colors font-bold text-sm"
-                >
-                  Previous Episode
-                </Link>
-              ) : (
-                <div className="px-4 py-2 bg-gray-800/50 text-gray-500 rounded-lg font-bold text-sm cursor-not-allowed">
-                  Previous Episode
-                </div>
-              )}
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 flex-wrap justify-center w-full lg:w-auto">
+          <div className="bg-[#10141d]/75 backdrop-blur-md p-3.5 sm:p-4 rounded-2xl border border-white/10 shrink-0 flex flex-col lg:flex-row items-center justify-between gap-4 shadow-xl">
+            {/* Left: Server and Audio Settings */}
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full lg:w-auto justify-center lg:justify-start">
               {/* Server Selector */}
               {!isHanimeMode() && (
-                <div className="flex items-center bg-gray-800 rounded-lg p-1 w-full sm:w-auto justify-center flex-wrap sm:flex-nowrap gap-1 sm:gap-0">
+                <div className="flex items-center bg-black/40 rounded-xl p-1 border border-white/5 w-full sm:w-auto justify-center flex-wrap sm:flex-nowrap gap-1">
                   {serverOrder.map((srv) => {
                     if (srv === 'filmu') {
                       return (
@@ -770,8 +727,8 @@ export default function Watch() {
                           onClick={() => handleSelectServer('filmu')}
                           disabled={!anime?.id && !animeId}
                           className={cn(
-                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-                            serverType === 'filmu' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed",
+                            serverType === 'filmu' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
                           )}
                         >
                           FilmU
@@ -786,8 +743,8 @@ export default function Watch() {
                           onClick={() => handleSelectServer('mal')}
                           disabled={!anime?.idMal}
                           className={cn(
-                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
-                            serverType === 'mal' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed",
+                            serverType === 'mal' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
                           )}
                           title={!anime?.idMal ? "MyAnimeList ID not available for this anime on Megaplay" : undefined}
                         >
@@ -803,8 +760,8 @@ export default function Watch() {
                           onClick={() => handleSelectServer('vidc')}
                           disabled={!anime?.id && !animeId && !anime?.idMal && !malId}
                           className={cn(
-                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-                            serverType === 'vidc' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed",
+                            serverType === 'vidc' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
                           )}
                         >
                           VidC
@@ -818,8 +775,8 @@ export default function Watch() {
                           onClick={() => handleSelectServer('anime')}
                           disabled={!anime?.id && !animeId}
                           className={cn(
-                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-                            serverType === 'anime' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed",
+                            serverType === 'anime' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
                           )}
                         >
                           Anime
@@ -833,8 +790,8 @@ export default function Watch() {
                           onClick={() => handleSelectServer('animepahe')}
                           disabled={!anime?.id && !animeId}
                           className={cn(
-                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-                            serverType === 'animepahe' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed",
+                            serverType === 'animepahe' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
                           )}
                         >
                           AnimePahe
@@ -848,8 +805,8 @@ export default function Watch() {
                           onClick={() => handleSelectServer('tryembed')}
                           disabled={!anime?.id && !animeId}
                           className={cn(
-                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-                            serverType === 'tryembed' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed",
+                            serverType === 'tryembed' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
                           )}
                         >
                           Try
@@ -863,8 +820,8 @@ export default function Watch() {
                           onClick={() => handleSelectServer('kozo')}
                           disabled={!anime?.idMal && !animeId}
                           className={cn(
-                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-                            serverType === 'kozo' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed",
+                            serverType === 'kozo' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
                           )}
                           title={!anime?.idMal ? "MAL ID not available for this anime" : undefined}
                         >
@@ -879,8 +836,8 @@ export default function Watch() {
                           onClick={() => handleSelectServer('vidsrc')}
                           disabled={!imdbId}
                           className={cn(
-                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-                            serverType === 'vidsrc' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                            "flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed",
+                            serverType === 'vidsrc' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
                           )}
                           title={!imdbId ? "IMDb ID not available for this anime" : undefined}
                         >
@@ -895,22 +852,23 @@ export default function Watch() {
                   <button
                     type="button"
                     onClick={() => setIsServerOrderModalOpen(true)}
-                    className="px-2.5 py-1.5 text-gray-400 hover:text-primary hover:bg-gray-700/60 rounded-md transition-colors ml-0.5"
+                    className="px-2.5 py-1.5 text-gray-400 hover:text-primary hover:bg-white/[0.06] rounded-lg transition-colors ml-0.5"
                     title="Arrange Server List Order"
                   >
                     <SlidersHorizontal size={14} />
                   </button>
                 </div>
               )}
+
               {/* VidC ID Mode Selector (AniList / MAL) */}
               {serverType === 'vidc' && (anime?.idMal || malId) && (anime?.id || animeId) && (
-                <div className="flex items-center bg-gray-800 rounded-lg p-1 w-full sm:w-auto justify-center mt-2 sm:mt-0">
+                <div className="flex items-center bg-black/40 rounded-xl p-1 border border-white/5 w-full sm:w-auto justify-center mt-1 sm:mt-0 gap-1">
                   <button
                     type="button"
                     onClick={() => setVidcUseMal(false)}
                     className={cn(
-                      "flex-1 sm:flex-none px-3 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors",
-                      !vidcUseMal ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                      "flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all",
+                      !vidcUseMal ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
                     )}
                     title="Stream with AniList ID"
                   >
@@ -920,8 +878,8 @@ export default function Watch() {
                     type="button"
                     onClick={() => setVidcUseMal(true)}
                     className={cn(
-                      "flex-1 sm:flex-none px-3 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors",
-                      vidcUseMal ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                      "flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all",
+                      vidcUseMal ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
                     )}
                     title="Stream with MyAnimeList ID"
                   >
@@ -932,12 +890,12 @@ export default function Watch() {
 
               {/* Audio Type Selector */}
               {(serverType === 'filmu' || serverType === 'mal' || serverType === 'vidc' || serverType === 'kozo' || serverType === 'anime' || serverType === 'animepahe' || serverType === 'tryembed') && (
-                <div className="flex items-center bg-gray-800 rounded-lg p-1 w-full sm:w-auto justify-center mt-2 sm:mt-0">
+                <div className="flex items-center bg-black/40 rounded-xl p-1 border border-white/5 w-full sm:w-auto justify-center mt-1 sm:mt-0 gap-1">
                   <button
                     onClick={() => setAudioType('sub')}
                     className={cn(
-                      "flex-1 sm:flex-none px-6 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors",
-                      audioType === 'sub' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                      "flex-1 sm:flex-none px-5 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all",
+                      audioType === 'sub' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
                     )}
                   >
                     Sub
@@ -945,8 +903,8 @@ export default function Watch() {
                   <button
                     onClick={() => setAudioType('dub')}
                     className={cn(
-                      "flex-1 sm:flex-none px-6 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-colors",
-                      audioType === 'dub' ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200"
+                      "flex-1 sm:flex-none px-5 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all",
+                      audioType === 'dub' ? "bg-primary text-[#0B0C0F] shadow-sm font-black" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
                     )}
                   >
                     Dub
@@ -955,18 +913,58 @@ export default function Watch() {
               )}
             </div>
 
-            {/* Desktop Nav: Next */}
-            <div className="hidden lg:block">
+            {/* Right: Unified Previous & Next Episode Navigation */}
+            <div className="flex items-center gap-2 w-full lg:w-auto justify-between lg:justify-end shrink-0 pt-2.5 lg:pt-0 border-t lg:border-t-0 border-white/5">
+              {/* Previous Episode Button */}
+              {currentEp > 1 ? (
+                <Link
+                  to={`/watch/${animeId}/${currentEp - 1}`}
+                  className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2 bg-white/[0.06] hover:bg-white/[0.12] hover:text-white text-gray-300 rounded-xl transition-all font-semibold text-xs sm:text-sm border border-white/10 active:scale-95 shadow-sm group"
+                  title={`Previous Episode (${currentEp - 1})`}
+                >
+                  <ChevronLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
+                  <span>Prev</span>
+                  <span className="hidden sm:inline">Episode</span>
+                </Link>
+              ) : (
+                <div 
+                  className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2 bg-white/[0.02] text-gray-600 rounded-xl font-semibold text-xs sm:text-sm border border-white/5 cursor-not-allowed select-none opacity-50"
+                  title="Already at first episode"
+                >
+                  <ChevronLeft size={16} />
+                  <span>Prev</span>
+                  <span className="hidden sm:inline">Episode</span>
+                </div>
+              )}
+
+              {/* Current Episode Badge */}
+              <div className="flex items-center gap-1.5 px-3 py-2 bg-black/40 border border-white/10 rounded-xl text-xs sm:text-sm font-bold text-gray-200 select-none">
+                <span className="text-gray-400 font-normal">Ep</span>
+                <span className="text-primary font-black">{currentEp}</span>
+                {episodeCount > 0 && (
+                  <span className="text-gray-500 font-normal text-xs">/ {episodeCount}</span>
+                )}
+              </div>
+
+              {/* Next Episode Button */}
               {currentEp < Math.max(1, episodeCount) ? (
                 <Link
                   to={`/watch/${animeId}/${currentEp + 1}`}
-                  className="px-4 py-2 bg-gray-800 hover:bg-primary hover:text-[#0B0C0F] text-gray-300 rounded-lg transition-colors font-bold text-sm"
+                  className="flex items-center gap-1.5 px-4 sm:px-5 py-2 bg-primary hover:bg-primary-hover text-[#0B0C0F] rounded-xl transition-all font-bold text-xs sm:text-sm shadow-md shadow-primary/20 hover:shadow-primary/30 active:scale-95 group"
+                  title={`Next Episode (${currentEp + 1})`}
                 >
-                  Next Episode
+                  <span>Next</span>
+                  <span className="hidden sm:inline">Episode</span>
+                  <ChevronRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
                 </Link>
               ) : (
-                <div className="px-4 py-2 bg-gray-800/50 text-gray-500 rounded-lg font-bold text-sm cursor-not-allowed">
-                  Next Episode
+                <div 
+                  className="flex items-center gap-1.5 px-4 sm:px-5 py-2 bg-white/[0.02] text-gray-600 rounded-xl font-bold text-xs sm:text-sm border border-white/5 cursor-not-allowed select-none opacity-50"
+                  title="Already at latest episode"
+                >
+                  <span>Next</span>
+                  <span className="hidden sm:inline">Episode</span>
+                  <ChevronRight size={16} />
                 </div>
               )}
             </div>
@@ -985,7 +983,25 @@ export default function Watch() {
               Episodes
             </h2>
             
-            <div className="flex gap-2">
+            <div className="flex items-center gap-1.5">
+              {currentEp > 1 && (
+                <Link
+                  to={`/watch/${animeId}/${currentEp - 1}`}
+                  className="p-1.5 text-gray-400 hover:text-white hover:bg-white/[0.12] transition-colors bg-white/[0.06] rounded-lg border border-white/10"
+                  title={`Previous Episode (${currentEp - 1})`}
+                >
+                  <ChevronLeft size={16} />
+                </Link>
+              )}
+              {currentEp < Math.max(1, episodeCount) && (
+                <Link
+                  to={`/watch/${animeId}/${currentEp + 1}`}
+                  className="p-1.5 text-primary hover:bg-primary hover:text-[#0B0C0F] transition-colors bg-primary/10 rounded-lg border border-primary/25 font-bold"
+                  title={`Next Episode (${currentEp + 1})`}
+                >
+                  <ChevronRight size={16} />
+                </Link>
+              )}
               <button 
                 onClick={() => setIsListView(!isListView)}
                 className="p-1.5 text-gray-400 hover:text-primary transition-colors bg-white/[0.06] hover:bg-white/[0.12] rounded-lg border border-white/10"
