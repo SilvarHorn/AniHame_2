@@ -788,11 +788,61 @@ async function synthesizeAnilistFallback(body: any): Promise<any> {
 
   // 2. Airing Schedule Query (Timetable & Schedule page)
   if (queryStr.includes('airingSchedules(')) {
-    const scheduleItems = await getAniScheduleFeed();
+    const [scheduleItems, episodeFeed] = await Promise.all([
+      getAniScheduleFeed(),
+      getAniEpisodeFeed()
+    ]);
     const gte = Number(variables.airingAt_greater) || 0;
     const lte = Number(variables.airingAt_lesser) || Infinity;
 
+    const scheduleMap = new Map<number, any>();
+    for (const anime of scheduleItems) {
+      if (anime?.id) scheduleMap.set(anime.id, anime);
+    }
+
+    const seenIds = new Set<string>();
     const matchedSchedules: any[] = [];
+
+    // 1. Process already-aired episodes from episodeFeed
+    for (const item of episodeFeed) {
+      if (!item || !item.episode?.airedAt) continue;
+      const airedSec = Math.floor(new Date(item.episode.airedAt).getTime() / 1000);
+      if (airedSec >= gte && airedSec <= lte) {
+        const details = scheduleMap.get(item.id);
+        if (details && (isAdult ? !details.isAdult : details.isAdult)) continue;
+        if (variables.countryOfOrigin && details?.countryOfOrigin && details.countryOfOrigin !== variables.countryOfOrigin) continue;
+
+        const epNum = Number(item.episode.aired) || 1;
+        const dedupeKey = `${item.id}-${epNum}`;
+        if (!seenIds.has(dedupeKey)) {
+          seenIds.add(dedupeKey);
+          matchedSchedules.push({
+            id: Number(item.id) * 10000 + epNum,
+            airingAt: airedSec,
+            episode: epNum,
+            media: {
+              id: item.id,
+              idMal: item.idMal || details?.idMal,
+              format: details?.format || item.format || "TV",
+              countryOfOrigin: details?.countryOfOrigin || "JP",
+              isAdult: Boolean(details?.isAdult),
+              genres: details?.genres || [],
+              title: {
+                romaji: details?.title?.romaji || details?.title?.english || `Anime ${item.id}`,
+                english: details?.title?.english || details?.title?.romaji || `Anime ${item.id}`,
+                native: details?.title?.native || ""
+              },
+              coverImage: {
+                large: details?.coverImage?.extraLarge || details?.coverImage?.medium || "",
+                extraLarge: details?.coverImage?.extraLarge || details?.coverImage?.medium || ""
+              }
+            }
+          });
+        }
+      }
+    }
+
+    // 2. Process upcoming episodes from scheduleItems nodes
     for (const anime of scheduleItems) {
       if (isAdult ? !anime.isAdult : anime.isAdult) continue;
       if (variables.countryOfOrigin && anime.countryOfOrigin && anime.countryOfOrigin !== variables.countryOfOrigin) continue;
@@ -800,27 +850,32 @@ async function synthesizeAnilistFallback(body: any): Promise<any> {
       const nodes = anime.airingSchedule?.nodes || [];
       for (const node of nodes) {
         if (node.airingAt >= gte && node.airingAt <= lte) {
-          matchedSchedules.push({
-            id: Number(anime.id) * 10000 + Number(node.episode),
-            airingAt: node.airingAt,
-            episode: node.episode,
-            media: {
-              id: anime.id,
-              format: anime.format || "TV",
-              countryOfOrigin: anime.countryOfOrigin || "JP",
-              isAdult: Boolean(anime.isAdult),
-              genres: anime.genres || [],
-              title: {
-                romaji: anime.title?.romaji || anime.title?.english || "Unknown",
-                english: anime.title?.english || anime.title?.romaji || "Unknown",
-                native: anime.title?.native || ""
-              },
-              coverImage: {
-                large: anime.coverImage?.extraLarge || anime.coverImage?.medium || "",
-                extraLarge: anime.coverImage?.extraLarge || anime.coverImage?.medium || ""
+          const epNum = Number(node.episode);
+          const dedupeKey = `${anime.id}-${epNum}`;
+          if (!seenIds.has(dedupeKey)) {
+            seenIds.add(dedupeKey);
+            matchedSchedules.push({
+              id: Number(anime.id) * 10000 + epNum,
+              airingAt: node.airingAt,
+              episode: epNum,
+              media: {
+                id: anime.id,
+                format: anime.format || "TV",
+                countryOfOrigin: anime.countryOfOrigin || "JP",
+                isAdult: Boolean(anime.isAdult),
+                genres: anime.genres || [],
+                title: {
+                  romaji: anime.title?.romaji || anime.title?.english || "Unknown",
+                  english: anime.title?.english || anime.title?.romaji || "Unknown",
+                  native: anime.title?.native || ""
+                },
+                coverImage: {
+                  large: anime.coverImage?.extraLarge || anime.coverImage?.medium || "",
+                  extraLarge: anime.coverImage?.extraLarge || anime.coverImage?.medium || ""
+                }
               }
-            }
-          });
+            });
+          }
         }
       }
     }
@@ -1190,7 +1245,7 @@ async function synthesizeAnilistFallback(body: any): Promise<any> {
 }
 
 // -----------------------------------------------------------------------------
-// POST /api/anilist - High-Speed Resilient Proxy with Automatic Circuit-Breaker
+// POST /api/anilist - High-Speed Resilient Proxy with Automatic Coalescing
 // -----------------------------------------------------------------------------
 let anilistCircuitBreakerUntil = 0;
 
@@ -1198,7 +1253,7 @@ let anilistCircuitBreakerUntil = 0;
 async function probeAnilistUpstream() {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2000);
+    const timeout = setTimeout(() => controller.abort(), 8000);
     const response = await fetch('https://graphql.anilist.co', {
       method: 'POST',
       headers: {
@@ -1215,20 +1270,18 @@ async function probeAnilistUpstream() {
     let json: any = null;
     try { json = JSON.parse(text); } catch {}
 
-    const isTemporarilyDisabled = !response.ok || json?.errors?.some((e: any) =>
-      e?.message?.toLowerCase().includes("temporarily disabled") ||
-      e?.message?.toLowerCase().includes("stability issues") ||
+    const isRateLimited = response.status === 429 || json?.errors?.some((e: any) =>
       e?.message?.toLowerCase().includes("rate limit") ||
-      e?.status === 403
+      e?.message?.toLowerCase().includes("too many requests")
     );
 
-    if (isTemporarilyDisabled) {
-      anilistCircuitBreakerUntil = Date.now() + 1000 * 60 * 30; // 30 minutes
-    } else if (json?.data) {
+    if (isRateLimited) {
+      anilistCircuitBreakerUntil = Date.now() + 1000 * 15; // 15 seconds cooldown on 429
+    } else if (response.ok && json?.data) {
       anilistCircuitBreakerUntil = 0; // upstream is healthy
     }
   } catch {
-    anilistCircuitBreakerUntil = Date.now() + 1000 * 60 * 15;
+    // Soft error, do not aggressively disable upstream
   }
 }
 
@@ -1245,14 +1298,14 @@ app.post("/api/anilist", async (req, res) => {
 
   try {
     const result = await coalesce(cacheKey, async () => {
-      // 1. Try official AniList upstream only if circuit breaker is not active
+      // 1. Try official AniList upstream
       let upstreamSuccess = false;
       let upstreamData: any = null;
 
       if (Date.now() > anilistCircuitBreakerUntil) {
         try {
           const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 4000);
+          const timeout = setTimeout(() => controller.abort(), 8000);
 
           const response = await fetch('https://graphql.anilist.co', {
             method: 'POST',
@@ -1270,25 +1323,21 @@ app.post("/api/anilist", async (req, res) => {
           let json: any = null;
           try { json = JSON.parse(text); } catch {}
 
-          const isTemporarilyDisabled = !response.ok || json?.errors?.some((e: any) =>
-            e?.message?.toLowerCase().includes("temporarily disabled") ||
-            e?.message?.toLowerCase().includes("stability issues") ||
+          const isRateLimited = response.status === 429 || json?.errors?.some((e: any) =>
             e?.message?.toLowerCase().includes("rate limit") ||
-            e?.message?.toLowerCase().includes("too many requests") ||
-            e?.message?.toLowerCase().includes("exceeded") ||
-            e?.status === 403
+            e?.message?.toLowerCase().includes("too many requests")
           );
 
-          if (response.ok && json && !isTemporarilyDisabled && json.data) {
+          if (isRateLimited) {
+            anilistCircuitBreakerUntil = Date.now() + 1000 * 15;
+          } else if (response.ok && json && json.data) {
             upstreamSuccess = true;
             upstreamData = json;
-          } else {
-            // Upstream failed or returned disabled/rate-limit error: engage circuit breaker for 30 minutes
-            anilistCircuitBreakerUntil = Date.now() + 1000 * 60 * 30;
+            anilistCircuitBreakerUntil = 0;
           }
         } catch {
-          // Network timeout or error
-          anilistCircuitBreakerUntil = Date.now() + 1000 * 60 * 5;
+          // Brief 5 second pause before retry if connection failed
+          anilistCircuitBreakerUntil = Date.now() + 1000 * 5;
         }
       }
 

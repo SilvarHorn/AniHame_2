@@ -26,12 +26,14 @@ export default React.memo(function Timetable() {
     const loadSchedule = async () => {
       setError('');
       try {
-        const now = Math.floor(Date.now() / 1000);
-        // Get next 7 days
-        const nextWeek = now + 7 * 24 * 60 * 60;
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        const startSec = Math.floor(startOfToday.getTime() / 1000);
+        // Get next 7 days including all of today's broadcasts
+        const nextWeek = startSec + 7 * 24 * 60 * 60;
         
         const data = await fetchAnilist(AIRING_SCHEDULE_QUERY, {
-          airingAt_greater: now,
+          airingAt_greater: startSec,
           airingAt_lesser: nextWeek,
         });
         
@@ -70,6 +72,7 @@ export default React.memo(function Timetable() {
   if (loading && schedule.length === 0) return null;
 
   const filteredSchedule = schedule.filter(item => country ? (item.media.countryOfOrigin || 'JP') === country : true);
+  const nowMs = Date.now();
 
   return (
     <div className="bg-[#151F2E] rounded-xl border border-primary/10 flex flex-col p-3 h-full w-full min-h-0">
@@ -91,11 +94,13 @@ export default React.memo(function Timetable() {
           const date = fromUnixTime(item.airingAt);
           const dayName = format(date, 'E').toUpperCase();
           const time = format(date, 'HH:mm');
+          const hasAired = item.airingAt * 1000 <= nowMs;
+          const targetUrl = hasAired ? `/watch/${item.media.id}/${item.episode}` : `/anime/${item.media.id}`;
           
           return (
             <Link 
-              to={`/anime/${item.media.id}`}
-              key={item.id} 
+              to={targetUrl}
+              key={`${item.media?.id}-${item.episode}`} 
               className="flex items-center gap-3 py-2 border border-gray-800 bg-[#0B0C0F] hover:border-primary/50 transition-colors group px-3 rounded-lg"
             >
               <div className="w-12 text-center shrink-0">
@@ -106,8 +111,19 @@ export default React.memo(function Timetable() {
                 <div className="text-xs font-bold text-[#FBF3E5] truncate group-hover:text-primary transition-colors">
                   {isHanimeMode() ? (item.media.title.romaji || item.media.title.english) : (item.media.title.english || item.media.title.romaji)}
                 </div>
-                <div className="text-[10px] text-primary truncate">
-                  Ep {item.episode} Airing
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="text-[10px] text-primary font-bold">
+                    Ep {item.episode}
+                  </span>
+                  {hasAired ? (
+                    <span className="text-[9px] font-bold text-[#22c55e] bg-[#22c55e]/10 border border-[#22c55e]/20 px-1 py-0.5 rounded leading-none">
+                      Aired
+                    </span>
+                  ) : (
+                    <span className="text-[9px] text-gray-400 font-medium">
+                      Airing
+                    </span>
+                  )}
                 </div>
               </div>
             </Link>

@@ -24,7 +24,9 @@ import {
   Film,
   Tv,
   ArrowRight,
-  Filter
+  Filter,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -227,13 +229,31 @@ export default function Schedule() {
     });
   }, [dayItems, country, statusFilter, searchFilter, nowMs]);
 
+  const [timezoneMode, setTimezoneMode] = useState<'local' | 'jst'>('local');
+
+  // Auto-switch away from 'upcoming' if the selected day has only already-aired anime (e.g. past days)
+  useEffect(() => {
+    if (statusFilter === 'upcoming' && dayItems.length > 0 && dayItems.every(i => i.airingAt * 1000 <= Date.now())) {
+      setStatusFilter('all');
+    }
+  }, [selectedDay, dayItems, statusFilter]);
+
+  const airedCount = useMemo(() => {
+    return dayItems.filter(i => i.airingAt * 1000 <= nowMs).length;
+  }, [dayItems, nowMs]);
+
+  const upcomingCount = useMemo(() => {
+    return dayItems.filter(i => i.airingAt * 1000 > nowMs).length;
+  }, [dayItems, nowMs]);
+
   const timezoneName = useMemo(() => {
+    if (timezoneMode === 'jst') return 'JST (UTC+9)';
     try {
       return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local Time';
     } catch {
       return 'Local Time';
     }
-  }, []);
+  }, [timezoneMode]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-[calc(100vh-3.5rem)] flex flex-col">
@@ -252,32 +272,71 @@ export default function Schedule() {
         </div>
 
         {/* Jump to Today & Quick Status */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Timezone Switcher */}
+          <div className="flex items-center bg-[#101319] p-1 rounded-xl border border-white/5 text-xs font-bold">
+            <button
+              onClick={() => setTimezoneMode('local')}
+              className={cn(
+                "px-2.5 py-1 rounded-lg transition-colors cursor-pointer",
+                timezoneMode === 'local' ? "bg-primary text-[#0B0C0F]" : "text-gray-400 hover:text-white"
+              )}
+              title="Show times in your device's local timezone"
+            >
+              Local
+            </button>
+            <button
+              onClick={() => setTimezoneMode('jst')}
+              className={cn(
+                "px-2.5 py-1 rounded-lg transition-colors cursor-pointer",
+                timezoneMode === 'jst' ? "bg-primary text-[#0B0C0F]" : "text-gray-400 hover:text-white"
+              )}
+              title="Show times in Japan Standard Time (JST / UTC+9)"
+            >
+              JST
+            </button>
+          </div>
+
           {selectedDay !== todayFormatStr && (
             <button
               onClick={() => setSelectedDay(todayFormatStr)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-xs font-bold transition-all shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-xs font-bold transition-all shadow-sm cursor-pointer"
               title="Jump to today's schedule"
             >
               <CalendarIcon size={14} />
-              <span>Jump to Today</span>
+              <span>Today</span>
             </button>
           )}
 
           <div className="flex items-center gap-1.5 bg-[#12151D] px-3 py-1.5 rounded-xl border border-white/5 text-xs text-gray-400">
             <Clock size={14} className="text-primary shrink-0" />
             <span className="font-mono font-bold text-gray-200">
-              {format(new Date(), 'HH:mm')}
+              {timezoneMode === 'jst' 
+                ? format(new Date(Date.now() + (9 * 60 + new Date().getTimezoneOffset()) * 60000), 'HH:mm') + ' JST'
+                : format(new Date(), 'HH:mm')}
             </span>
           </div>
         </div>
       </div>
 
       {/* Days Scroller */}
-      <div className="relative mb-6">
+      <div className="relative mb-6 group/days">
+        <button
+          onClick={() => {
+            if (scrollContainerRef.current) {
+              scrollContainerRef.current.scrollBy({ left: -260, behavior: 'smooth' });
+            }
+          }}
+          className="absolute -left-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-[#151F2E]/95 border border-white/10 text-white flex items-center justify-center hover:bg-primary hover:text-black transition-all shadow-lg opacity-0 group-hover/days:opacity-100 hidden sm:flex cursor-pointer"
+          title="Scroll days left"
+          aria-label="Scroll days left"
+        >
+          <ChevronLeft size={16} />
+        </button>
+
         <div 
           ref={scrollContainerRef}
-          className="flex overflow-x-auto gap-2.5 pb-2 pt-1 px-1 custom-scrollbar scroll-smooth"
+          className="flex overflow-x-auto gap-2.5 pb-3.5 pt-1 px-1 custom-scrollbar scroll-smooth"
         >
           {scheduleDays.map(d => {
             const isSelected = selectedDay === d.formatStr;
@@ -321,6 +380,19 @@ export default function Schedule() {
             );
           })}
         </div>
+
+        <button
+          onClick={() => {
+            if (scrollContainerRef.current) {
+              scrollContainerRef.current.scrollBy({ left: 260, behavior: 'smooth' });
+            }
+          }}
+          className="absolute -right-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-[#151F2E]/95 border border-white/10 text-white flex items-center justify-center hover:bg-primary hover:text-black transition-all shadow-lg opacity-0 group-hover/days:opacity-100 hidden sm:flex cursor-pointer"
+          title="Scroll days right"
+          aria-label="Scroll days right"
+        >
+          <ChevronRight size={16} />
+        </button>
       </div>
 
       {/* Control Bar: Search & Filters */}
@@ -352,29 +424,29 @@ export default function Schedule() {
             <button
               onClick={() => setStatusFilter('all')}
               className={cn(
-                "px-3 py-1 rounded-lg text-xs font-bold transition-colors",
+                "px-3 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer",
                 statusFilter === 'all' ? "bg-primary text-[#0B0C0F]" : "text-gray-400 hover:text-white"
               )}
             >
-              All
-            </button>
-            <button
-              onClick={() => setStatusFilter('upcoming')}
-              className={cn(
-                "px-3 py-1 rounded-lg text-xs font-bold transition-colors",
-                statusFilter === 'upcoming' ? "bg-primary text-[#0B0C0F]" : "text-gray-400 hover:text-white"
-              )}
-            >
-              Upcoming
+              All ({dayItems.length})
             </button>
             <button
               onClick={() => setStatusFilter('aired')}
               className={cn(
-                "px-3 py-1 rounded-lg text-xs font-bold transition-colors",
+                "px-3 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer",
                 statusFilter === 'aired' ? "bg-primary text-[#0B0C0F]" : "text-gray-400 hover:text-white"
               )}
             >
-              Aired
+              Aired ({airedCount})
+            </button>
+            <button
+              onClick={() => setStatusFilter('upcoming')}
+              className={cn(
+                "px-3 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer",
+                statusFilter === 'upcoming' ? "bg-primary text-[#0B0C0F]" : "text-gray-400 hover:text-white"
+              )}
+            >
+              Upcoming ({upcomingCount})
             </button>
           </div>
 
@@ -574,8 +646,23 @@ export default function Schedule() {
                         <div className="flex items-center gap-1.5 text-xs text-gray-400 mt-2">
                           <Clock size={12} className="text-primary shrink-0" />
                           <span>
-                            Airs at <strong className="text-gray-200">{format(airDate, 'HH:mm')}</strong>
-                            <span className="text-[10px] text-gray-500 ml-1">({format(airDate, 'h:mm a')})</span>
+                            {hasAired ? 'Aired at ' : 'Airs at '}
+                            <strong className="text-gray-200">
+                              {format(
+                                timezoneMode === 'jst'
+                                  ? new Date(airDate.getTime() + (9 * 60 + airDate.getTimezoneOffset()) * 60000)
+                                  : airDate,
+                                'HH:mm'
+                              )}
+                            </strong>
+                            <span className="text-[10px] text-gray-500 ml-1">
+                              ({format(
+                                timezoneMode === 'jst'
+                                  ? new Date(airDate.getTime() + (9 * 60 + airDate.getTimezoneOffset()) * 60000)
+                                  : airDate,
+                                'h:mm a'
+                              )}{timezoneMode === 'jst' ? ' JST' : ''})
+                            </span>
                           </span>
                         </div>
                       </div>
