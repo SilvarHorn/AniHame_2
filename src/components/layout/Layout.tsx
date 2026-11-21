@@ -52,7 +52,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div 
-      className="min-h-screen text-[#FBF3E5] font-sans selection:bg-primary/30 bg-fixed relative overflow-x-clip bg-[#0B0C0F]"
+      className="min-h-screen text-[#FBF3E5] font-sans selection:bg-primary/30 bg-fixed relative overflow-x-clip bg-[#0B0C0F] transition-colors duration-300"
       style={
         !bgImage && bgGradient?.includes('gradient')
           ? { backgroundImage: bgGradient }
@@ -64,7 +64,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {bgImage && (
         <>
           <div 
-            className="fixed inset-0 z-0 pointer-events-none bg-cover bg-center bg-no-repeat bg-fixed"
+            className="fixed inset-0 z-0 pointer-events-none bg-cover bg-center bg-no-repeat bg-fixed transition-opacity duration-500 ease-out"
             style={{ 
               backgroundImage: `url(${bgImage})`,
               opacity: bgOpacity / 100 

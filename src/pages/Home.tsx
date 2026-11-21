@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { appLog } from '../lib/logger';
 import Banner from '../components/home/Banner';
 import TrendingGrid from '../components/home/TrendingGrid';
 import LatestGrid from '../components/home/LatestGrid';
@@ -68,7 +69,7 @@ export default function Home() {
         setTrending(results);
       } catch (error) {
         if (!isMounted) return;
-        console.error('Error fetching trending:', error);
+        appLog.error('home:trending', error);
         setError('Failed to fetch trending anime.');
       } finally {
         if (isMounted) setLoading(false);
@@ -97,7 +98,7 @@ export default function Home() {
         }
       } catch (err) {
         if (isMounted) {
-          console.error('Error fetching latest:', err);
+          appLog.error('home:latest', err);
           setError('Failed to fetch latest updates.');
         }
       } finally {

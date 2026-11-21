@@ -3,7 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { AnimeMedia } from '../../types';
 import { Star, MonitorPlay, Calendar, Clock, PlayCircle, Info } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
+import { useAuth, getPreferredAnimeTitle } from '../../contexts/AuthContext';
 
 export function AnimeInfo({
   anime,
@@ -20,7 +22,8 @@ export function AnimeInfo({
   malScore?: number | null;
   ageRating?: string | null;
 }) {
-  const title = isHanimeMode() ? (anime.title.romaji || anime.title.english) : (anime.title.english || anime.title.romaji);
+  const { profile } = useAuth();
+  const title = getPreferredAnimeTitle(anime.title, profile?.preferences?.titleLanguage || 'english', isHanimeMode());
   
   const [kitsuScore, setKitsuScore] = useState<number | null>(initialKitsuScore || null);
   const [malScore, setMalScore] = useState<number | null>(
@@ -119,32 +122,47 @@ export function AnimeInfo({
         </div>
         
         {ageRating && (
-          <>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.92 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.22 }}
+            className="flex items-center gap-4"
+          >
             <div className="w-1.5 h-1.5 rounded-full bg-gray-600" />
             <div className="flex items-center gap-1.5 text-gray-300">
               <span className="px-2 py-0.5 rounded text-[11px] font-bold border border-gray-600 uppercase tracking-wider">{ageRating}</span>
             </div>
-          </>
+          </motion.div>
         )}
 
         {kitsuScore && (
-          <>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.92 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.22 }}
+            className="flex items-center gap-4"
+          >
             <div className="w-1.5 h-1.5 rounded-full bg-gray-600" />
             <div className="flex items-center gap-1.5 text-[#FD755C] drop-shadow-sm">
               <Star size={16} fill="currentColor" />
               <span>Kitsu: {kitsuScore}%</span>
             </div>
-          </>
+          </motion.div>
         )}
 
         {malScore && (
-          <>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.92 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.22 }}
+            className="flex items-center gap-4"
+          >
             <div className="w-1.5 h-1.5 rounded-full bg-gray-600" />
             <div className="flex items-center gap-1.5 text-[#5383E8] drop-shadow-sm">
               <Star size={16} fill="currentColor" />
               <span>MAL: {malScore}</span>
             </div>
-          </>
+          </motion.div>
         )}
 
         <div className="w-1.5 h-1.5 rounded-full bg-gray-600" />
@@ -192,7 +210,7 @@ export function AnimeInfo({
                 key={genre}
                 to={`/explore?genre=${encodeURIComponent(genre)}`}
                 title={`Filter explore by ${genre}`}
-                className="px-3 py-1 bg-primary/10 text-primary border border-primary/25 rounded-full text-xs font-semibold hover:bg-primary hover:text-[#0B0C0F] transition-all duration-150"
+                className="px-3 py-1 bg-primary/10 text-primary border border-primary/25 rounded-full text-xs font-semibold hover:bg-primary hover:text-[#0B0C0F] hover:-translate-y-0.5 active:scale-95 transition-all duration-150"
               >
                 {genre}
               </Link>
@@ -216,22 +234,31 @@ export function AnimeInfo({
               <span className="text-[11px] text-gray-500 font-normal lowercase tracking-normal">(click to search keyword)</span>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
-              {displayedTags.map(tag => (
-                <Link
-                  key={tag.name}
-                  to={`/explore?search=${encodeURIComponent(tag.name)}`}
-                  title={`Search for "${tag.name}" in Explore`}
-                  className="px-2.5 py-1 bg-gray-800/80 text-gray-300 hover:bg-gray-700 hover:text-white rounded-md text-xs border border-white/5 transition-colors inline-flex items-center gap-1"
-                >
-                  <span className="text-gray-500 text-[11px]">#</span>
-                  <span>{tag.name}</span>
-                </Link>
-              ))}
+              <AnimatePresence initial={false}>
+                {displayedTags.map(tag => (
+                  <motion.div
+                    key={tag.name}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                  >
+                    <Link
+                      to={`/explore?search=${encodeURIComponent(tag.name)}`}
+                      title={`Search for "${tag.name}" in Explore`}
+                      className="px-2.5 py-1 bg-gray-800/80 text-gray-300 hover:bg-gray-700 hover:text-white hover:-translate-y-0.5 active:scale-95 rounded-md text-xs border border-white/5 transition-all duration-150 inline-flex items-center gap-1"
+                    >
+                      <span className="text-gray-500 text-[11px]">#</span>
+                      <span>{tag.name}</span>
+                    </Link>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
               {hasMoreTags && (
                 <button
                   type="button"
                   onClick={() => setShowAllTags(!showAllTags)}
-                  className="px-2.5 py-1 text-gray-400 hover:text-primary text-xs font-medium transition-colors cursor-pointer"
+                  className="px-2.5 py-1 text-gray-400 hover:text-primary active:scale-95 text-xs font-medium transition-all duration-150 cursor-pointer"
                 >
                   {showAllTags ? 'Show less' : `+${safeTags.length - 10} more`}
                 </button>

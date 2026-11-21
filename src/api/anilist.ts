@@ -544,7 +544,6 @@ export async function getRandomAnimeWithReroll(maxAttempts = 12): Promise<AnimeM
 
       const mediaList: AnimeMedia[] = data?.Page?.media || [];
       if (!Array.isArray(mediaList) || mediaList.length === 0) {
-        console.warn(`[RandomAnime] Attempt ${attempt}: No anime on page ${randomPage}, rerolling...`);
         continue;
       }
 
@@ -558,14 +557,12 @@ export async function getRandomAnimeWithReroll(maxAttempts = 12): Promise<AnimeM
       );
 
       if (validMedia.length === 0) {
-        console.warn(`[RandomAnime] Attempt ${attempt}: Candidates lacked complete data, rerolling...`);
         continue;
       }
 
       const picked = validMedia[Math.floor(Math.random() * validMedia.length)];
       return picked;
     } catch (err) {
-      console.warn(`[RandomAnime] Attempt ${attempt} encountered error:`, err);
       if (attempt === maxAttempts) throw err;
       // Brief pause before rerolling
       await new Promise(r => setTimeout(r, 200));

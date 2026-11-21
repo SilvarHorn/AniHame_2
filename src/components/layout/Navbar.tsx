@@ -2,7 +2,8 @@ import { isHanimeMode } from "../../api/anilist";
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Search, User, Tv, Menu, X, RotateCcw } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
+import { motion, AnimatePresence } from 'motion/react';
+import { useAuth, getPreferredAnimeTitle } from '../../contexts/AuthContext';
 import { fetchAnilist, SEARCH_ANIME_QUERY } from '../../api/anilist';
 import { AnimeMedia } from '../../types';
 
@@ -68,9 +69,7 @@ export default function Navbar() {
       const navProf = navSaved ? JSON.parse(navSaved) : {};
       navProf.username = targetName;
       localStorage.setItem('anime_profile', JSON.stringify(navProf));
-    } catch (err) {
-      console.error('Error updating localStorage on revert:', err);
-    }
+    } catch {}
 
     await updateProfileData({
       displayName: targetName,
@@ -83,14 +82,17 @@ export default function Navbar() {
     window.location.href = '/';
   };
 
+  const isNavActive = (path: string) =>
+    path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
+
   const getNavClass = (path: string) => {
-    const isActive = path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
-    return `px-3 py-1.5 rounded-lg transition-colors ${isActive ? 'bg-primary/10 text-primary font-bold' : 'hover:text-primary'}`;
+    const isActive = isNavActive(path);
+    return `relative px-3 py-1.5 rounded-lg transition-colors duration-200 ${isActive ? 'text-primary font-bold' : 'hover:text-primary'}`;
   };
 
   const getMobileNavClass = (path: string) => {
-    const isActive = path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
-    return `px-3 py-2 rounded-lg text-sm tracking-wide transition-colors ${isActive ? 'bg-primary/10 text-primary font-bold' : 'text-[#FBF3E5] font-bold hover:text-primary hover:bg-white/5'}`;
+    const isActive = isNavActive(path);
+    return `px-3 py-2 rounded-lg text-sm tracking-wide transition-all duration-200 ${isActive ? 'bg-primary/10 text-primary font-bold' : 'text-[#FBF3E5] font-bold hover:text-primary hover:bg-white/5 hover:translate-x-0.5'}`;
   };
 
 
@@ -103,9 +105,7 @@ export default function Navbar() {
       try {
         const data = await fetchAnilist(SEARCH_ANIME_QUERY, { search: searchQuery, perPage: 5 });
         setPreviewResults(data?.Page?.media || []);
-      } catch (e) {
-        console.error(e);
-      }
+      } catch {}
     };
     const timeoutId = setTimeout(fetchPreview, 300);
     return () => clearTimeout(timeoutId);
@@ -125,26 +125,41 @@ export default function Navbar() {
       <div className="w-full px-4 sm:px-6 lg:px-8 w-full">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-8">
-            <Link to="/" className="text-3xl tracking-wide text-primary" style={{ fontFamily: "'Dancing Script', cursive" }}>
+            <Link to="/" className="text-3xl tracking-wide text-primary transition-transform duration-200 hover:scale-[1.03] active:scale-95" style={{ fontFamily: "'Dancing Script', cursive" }}>
               Ani<span className="text-white">Hame</span>
             </Link>
             {!isNHentai && (
               <div className="hidden md:flex gap-2 text-sm font-medium text-gray-400 items-center">
-                <Link to="/" className={getNavClass('/')}>Home</Link>
-                <Link to="/explore" className={getNavClass('/explore')}>Explore</Link>
-                <Link to="/trending" className={getNavClass('/trending')}>Trending</Link>
-                <Link 
-                  to={`/random?t=${Date.now()}`} 
-                  onClick={(e) => {
-                    e.preventDefault();
-                    navigate(`/random?t=${Date.now()}`);
-                  }}
-                  className={getNavClass('/random')}
-                >
-                  Random
-                </Link>
-                <Link to="/profile" className={getNavClass('/profile')}>My List</Link>
-                <Link to="/schedule" className={getNavClass('/schedule')}>Schedule</Link>
+                {[
+                  { path: '/', label: 'Home' },
+                  { path: '/explore', label: 'Explore' },
+                  { path: '/trending', label: 'Trending' },
+                  { path: '/random', label: 'Random' },
+                  { path: '/profile', label: 'My List' },
+                  { path: '/schedule', label: 'Schedule' },
+                ].map((item) => {
+                  const active = isNavActive(item.path);
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path === '/random' ? `/random?t=${Date.now()}` : item.path}
+                      onClick={item.path === '/random' ? (e) => {
+                        e.preventDefault();
+                        navigate(`/random?t=${Date.now()}`);
+                      } : undefined}
+                      className={getNavClass(item.path)}
+                    >
+                      {active && (
+                        <motion.span
+                          layoutId="navbar-active-pill"
+                          transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                          className="absolute inset-0 rounded-lg bg-primary/10"
+                        />
+                      )}
+                      <span className="relative z-10">{item.label}</span>
+                    </Link>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -160,24 +175,32 @@ export default function Navbar() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onFocus={() => setShowPreview(true)}
                     onBlur={() => setTimeout(() => setShowPreview(false), 200)}
-                    className="bg-[#0B0C0F] border border-gray-700 rounded-full px-4 py-1.5 text-xs w-64 focus:border-primary outline-none text-[#FBF3E5] placeholder-gray-500"
+                    className="bg-[#0B0C0F] border border-gray-700 rounded-full px-4 py-1.5 text-xs w-64 focus:w-72 focus:border-primary outline-none text-[#FBF3E5] placeholder-gray-500 transition-all duration-200"
                   />
-                  <Search className="absolute right-3 top-1.5 text-gray-400 pointer-events-none" size={14} />
+                  <Search className="absolute right-3 top-1.5 text-gray-400 pointer-events-none transition-colors duration-200" size={14} />
                 </form>
                               
-                {showPreview && previewResults.length > 0 && (
-                   <div className="absolute top-full mt-2 right-0 w-64 bg-black border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
-                     {previewResults.map(anime => (
-                       <Link key={anime.id} to={`/anime/${anime.id}`} className="flex items-center gap-3 p-2 hover:bg-white/5 border-b border-gray-800 last:border-0 transition-colors">
-                         <img src={anime.coverImage.large} className="w-8 h-10 object-cover rounded" />
-                         <div className="flex-1 min-w-0">
-                           <div className="text-xs font-bold text-[#FBF3E5] truncate">{isHanimeMode() ? (anime.title.romaji || anime.title.english) : (anime.title.english || anime.title.romaji)}</div>
-                           <div className="text-[10px] text-gray-500 truncate">{anime.genres?.[0]}</div>
-                         </div>
-                       </Link>
-                     ))}
-                   </div>
-                )}
+                <AnimatePresence>
+                  {showPreview && previewResults.length > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                      transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                      className="absolute top-full mt-2 right-0 w-72 bg-black/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50"
+                    >
+                      {previewResults.map(anime => (
+                        <Link key={anime.id} to={`/anime/${anime.id}`} className="flex items-center gap-3 p-2 hover:bg-white/[0.07] border-b border-gray-800/80 last:border-0 transition-colors duration-150">
+                          <img src={anime.coverImage.large} className="w-8 h-10 object-cover rounded" />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-bold text-[#FBF3E5] truncate">{getPreferredAnimeTitle(anime.title, profile?.preferences?.titleLanguage || 'english', isHanimeMode())}</div>
+                            <div className="text-[10px] text-gray-500 truncate">{anime.genres?.[0]}</div>
+                          </div>
+                        </Link>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
           )}
@@ -236,89 +259,120 @@ export default function Navbar() {
               </Link>
             )}
             {!isNHentai && (
-              <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="text-gray-400 hover:text-white p-1">
-                {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+              <button
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="text-gray-400 hover:text-white p-1 transition-transform duration-200 active:scale-90"
+                aria-label="Toggle Menu"
+              >
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.span
+                    key={isMobileMenuOpen ? 'close' : 'open'}
+                    initial={{ opacity: 0, rotate: -90, scale: 0.8 }}
+                    animate={{ opacity: 1, rotate: 0, scale: 1 }}
+                    exit={{ opacity: 0, rotate: 90, scale: 0.8 }}
+                    transition={{ duration: 0.15 }}
+                    className="block"
+                  >
+                    {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+                  </motion.span>
+                </AnimatePresence>
               </button>
             )}
           </div>
         </div>
       </div>
 
-      {!isNHentai && isMobileMenuOpen && (
-        <div className="md:hidden absolute top-14 left-0 w-full bg-black border-b border-white/10 px-4 pt-4 pb-4 shadow-xl z-50">
-          <div className="flex flex-col gap-2 mb-4">
-            <Link to="/" onClick={() => setIsMobileMenuOpen(false)} className={getMobileNavClass('/')}>Home</Link>
-            <Link to="/explore" onClick={() => setIsMobileMenuOpen(false)} className={getMobileNavClass('/explore')}>Explore</Link>
-            <Link to="/trending" onClick={() => setIsMobileMenuOpen(false)} className={getMobileNavClass('/trending')}>Trending</Link>
-            <Link 
-              to={`/random?t=${Date.now()}`} 
-              onClick={(e) => {
-                e.preventDefault();
-                setIsMobileMenuOpen(false);
-                navigate(`/random?t=${Date.now()}`);
-              }} 
-              className={getMobileNavClass('/random')}
-            >
-              Random
-            </Link>
-            <Link to="/profile" onClick={() => setIsMobileMenuOpen(false)} className={getMobileNavClass('/profile')}>My List</Link>
-            <Link to="/schedule" onClick={() => setIsMobileMenuOpen(false)} className={getMobileNavClass('/schedule')}>Schedule</Link>
-          </div>
-          <div className="relative mb-2">
-            <form onSubmit={handleSearch} className="relative">
-              <input
-                type="text"
-                placeholder="Search anime..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onFocus={() => setShowPreview(true)}
-                onBlur={() => setTimeout(() => setShowPreview(false), 200)}
-                className="w-full bg-[#0B0C0F] text-[#FBF3E5] rounded-full py-2 px-4 focus:outline-none focus:border-primary border border-gray-700 text-sm"
-              />
-              <Search className="absolute right-4 top-2.5 text-gray-400" size={16} />
-            </form>
-            {showPreview && previewResults.length > 0 && (
-               <div className="absolute top-full mt-2 left-0 w-full bg-black border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
-                 {previewResults.map(anime => (
-                   <Link key={anime.id} to={`/anime/${anime.id}`} onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-3 p-2 hover:bg-white/5 border-b border-gray-800 last:border-0 transition-colors">
-                     <img src={anime.coverImage.large} className="w-10 h-14 object-cover rounded" />
-                     <div className="flex-1 min-w-0">
-                       <div className="text-sm font-bold text-[#FBF3E5] truncate">{isHanimeMode() ? (anime.title.romaji || anime.title.english) : (anime.title.english || anime.title.romaji)}</div>
-                       <div className="text-xs text-gray-500 truncate">{anime.genres?.join(', ')}</div>
-                     </div>
-                   </Link>
-                 ))}
-               </div>
-            )}
-          </div>
-          {isAdultMode && isHomePage && (
-            <button 
-              type="button"
-              id="revert-mode-btn-drawer"
-              onClick={() => {
-                setIsMobileMenuOpen(false);
-                handleRevert();
-              }}
-              className="w-full flex items-center justify-center gap-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 px-4 py-2 rounded-full text-sm font-bold transition-colors border border-red-500/30 mb-2 cursor-pointer"
-            >
-              <RotateCcw size={15} />
-              <span>Revert to {profile?.previousDisplayName || 'User'}</span>
-            </button>
-          )}
-          <Link 
-            to="/profile"
-            onClick={() => setIsMobileMenuOpen(false)}
-            className="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-full text-sm font-medium transition-colors border border-gray-700"
+      <AnimatePresence>
+        {!isNHentai && isMobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            className="md:hidden absolute top-14 left-0 w-full bg-black/95 backdrop-blur-xl border-b border-white/10 px-4 pt-4 pb-4 shadow-2xl z-50"
           >
-            {displayAvatar ? (
-              <img src={displayAvatar} alt="Profile" className="w-6 h-6 rounded-full object-cover" />
-            ) : (
-              <User size={16} />
+            <div className="flex flex-col gap-2 mb-4">
+              <Link to="/" onClick={() => setIsMobileMenuOpen(false)} className={getMobileNavClass('/')}>Home</Link>
+              <Link to="/explore" onClick={() => setIsMobileMenuOpen(false)} className={getMobileNavClass('/explore')}>Explore</Link>
+              <Link to="/trending" onClick={() => setIsMobileMenuOpen(false)} className={getMobileNavClass('/trending')}>Trending</Link>
+              <Link 
+                to={`/random?t=${Date.now()}`} 
+                onClick={(e) => {
+                  e.preventDefault();
+                  setIsMobileMenuOpen(false);
+                  navigate(`/random?t=${Date.now()}`);
+                }} 
+                className={getMobileNavClass('/random')}
+              >
+                Random
+              </Link>
+              <Link to="/profile" onClick={() => setIsMobileMenuOpen(false)} className={getMobileNavClass('/profile')}>My List</Link>
+              <Link to="/schedule" onClick={() => setIsMobileMenuOpen(false)} className={getMobileNavClass('/schedule')}>Schedule</Link>
+            </div>
+            <div className="relative mb-2">
+              <form onSubmit={handleSearch} className="relative">
+                <input
+                  type="text"
+                  placeholder="Search anime..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onFocus={() => setShowPreview(true)}
+                  onBlur={() => setTimeout(() => setShowPreview(false), 200)}
+                  className="w-full bg-[#0B0C0F] text-[#FBF3E5] rounded-full py-2 px-4 focus:outline-none focus:border-primary border border-gray-700 text-sm transition-colors duration-200"
+                />
+                <Search className="absolute right-4 top-2.5 text-gray-400" size={16} />
+              </form>
+              <AnimatePresence>
+                {showPreview && previewResults.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                    transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                    className="absolute top-full mt-2 left-0 w-full bg-black/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50"
+                  >
+                    {previewResults.map(anime => (
+                      <Link key={anime.id} to={`/anime/${anime.id}`} onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-3 p-2 hover:bg-white/[0.07] border-b border-gray-800/80 last:border-0 transition-colors duration-150">
+                        <img src={anime.coverImage.large} className="w-10 h-14 object-cover rounded" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-bold text-[#FBF3E5] truncate">{getPreferredAnimeTitle(anime.title, profile?.preferences?.titleLanguage || 'english', isHanimeMode())}</div>
+                          <div className="text-xs text-gray-500 truncate">{anime.genres?.join(', ')}</div>
+                        </div>
+                      </Link>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+            {isAdultMode && isHomePage && (
+              <button 
+                type="button"
+                id="revert-mode-btn-drawer"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  handleRevert();
+                }}
+                className="w-full flex items-center justify-center gap-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 px-4 py-2 rounded-full text-sm font-bold transition-all active:scale-95 border border-red-500/30 mb-2 cursor-pointer"
+              >
+                <RotateCcw size={15} />
+                <span>Revert to {profile?.previousDisplayName || 'User'}</span>
+              </button>
             )}
-            <span className="truncate max-w-[150px]">{displayUsername}</span>
-          </Link>
-        </div>
-      )}
+            <Link 
+              to="/profile"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-full text-sm font-medium transition-all active:scale-95 border border-gray-700"
+            >
+              {displayAvatar ? (
+                <img src={displayAvatar} alt="Profile" className="w-6 h-6 rounded-full object-cover" />
+              ) : (
+                <User size={16} />
+              )}
+              <span className="truncate max-w-[150px]">{displayUsername}</span>
+            </Link>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </nav>
   );
 }

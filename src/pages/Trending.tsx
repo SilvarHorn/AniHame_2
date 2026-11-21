@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { appLog } from '../lib/logger';
 import { fetchAnilist, TRENDING_ANIME_QUERY } from '../api/anilist';
 import { AnimeMedia } from '../types';
 import AnimeCard from '../components/ui/AnimeCard';
@@ -33,7 +34,7 @@ export default function Trending() {
         setHasNextPage(results.length === 24);
       } catch (error) {
         if (!isCurrent) return;
-        console.error('Error fetching trending:', error);
+        appLog.error('trending', error);
         setError('Failed to fetch trending anime.');
       } finally {
         if (isCurrent) setLoading(false);

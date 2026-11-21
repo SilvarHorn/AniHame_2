@@ -5,6 +5,39 @@ import * as cheerio from "cheerio";
 const app = express();
 app.use(express.json());
 
+// Compact, deduplicated server logger (prevents raw Axios dumps & log storms)
+const SERVER_LOG_WINDOW_MS = 60_000;
+const serverLogState = new Map<string, { lastAt: number; suppressed: number }>();
+
+function summarizeServerErr(err: any): string {
+  if (!err) return 'unknown';
+  if (typeof err === 'string') return err;
+  const status = err?.response?.status ? `HTTP ${err.response.status}` : '';
+  const code = err?.code && typeof err.code === 'string' ? err.code : '';
+  const msg = err?.message ? String(err.message) : '';
+  return [status, code, msg].filter(Boolean).join(' - ') || 'error';
+}
+
+function logApi(level: 'warn' | 'error', scope: string, err: unknown): void {
+  const summary = summarizeServerErr(err);
+  const key = `${level}:${scope}:${summary}`;
+  const now = Date.now();
+  const prev = serverLogState.get(key);
+  if (prev && now - prev.lastAt < SERVER_LOG_WINDOW_MS) {
+    prev.suppressed += 1;
+    return;
+  }
+  const suffix = prev && prev.suppressed > 0 ? ` (+${prev.suppressed})` : '';
+  if (serverLogState.size >= 120) {
+    const oldest = serverLogState.keys().next().value;
+    if (oldest) serverLogState.delete(oldest);
+  }
+  serverLogState.set(key, { lastAt: now, suppressed: 0 });
+  const line = `[api:${scope}] ${summary}${suffix}`;
+  if (level === 'error') console.error(line);
+  else console.warn(line);
+}
+
 // -----------------------------------------------------------------------------
 // In-Memory Multi-Tier Cache with TTL & Size Eviction
 // -----------------------------------------------------------------------------
@@ -141,8 +174,7 @@ async function preloadAnimeMappings(): Promise<boolean> {
         return true;
       }
       return false;
-    } catch (err: any) {
-      console.warn("Failed to fetch anime mappings:", err?.message || err);
+    } catch {
       mappingFetchPromise = null;
       return false;
     }
@@ -212,8 +244,8 @@ async function getAniScheduleFeed(): Promise<any[]> {
       scheduleFetchTime = Date.now();
       return res.data;
     }
-  } catch (err: any) {
-    console.warn("AniSchedule feed fetch error:", err.message);
+  } catch {
+    // Keep last cached schedule silently
   }
   return cachedScheduleData || [];
 }
@@ -231,8 +263,8 @@ async function getAniEpisodeFeed(): Promise<any[]> {
       episodeFeedFetchTime = Date.now();
       return res.data;
     }
-  } catch (err: any) {
-    console.warn("AniEpisode feed fetch error:", err.message);
+  } catch {
+    // Keep last cached episode feed silently
   }
   return cachedEpisodeFeed || [];
 }
@@ -299,7 +331,7 @@ app.get("/api/animeschedule/latest", async (req, res) => {
       pageInfo: { hasNextPage }
     });
   } catch (err: any) {
-    console.error("Error in /api/animeschedule/latest:", err.message);
+    logApi('error', 'latest', err);
     return res.status(500).json({ error: "Failed to load latest updates" });
   }
 });
@@ -518,8 +550,8 @@ async function getPopularAnimeCatalog(): Promise<any[]> {
         popularCatalogFetchTime = Date.now();
         return popularAnimeCatalog;
       }
-    } catch (err: any) {
-      console.warn("Popular catalog fetch error:", err?.message || err);
+    } catch {
+      // Background catalog warm-up will retry on next request
     } finally {
       popularCatalogLoadingPromise = null;
     }
@@ -1158,7 +1190,7 @@ async function synthesizeAnilistFallback(body: any): Promise<any> {
         }
       };
     } catch (e: any) {
-      console.error('Explore search error:', e?.message || e);
+      logApi('error', 'explore', e);
     }
   }
 
@@ -1354,7 +1386,7 @@ app.post("/api/anilist", async (req, res) => {
           return fallbackResult;
         }
       } catch (fallbackErr: any) {
-        console.error("AniList fallback error:", fallbackErr?.message || fallbackErr);
+        logApi('error', 'anilist-fallback', fallbackErr);
       }
 
       return null;
@@ -1365,7 +1397,7 @@ app.post("/api/anilist", async (req, res) => {
     }
     return res.status(500).json({ error: "AniList API temporarily unavailable" });
   } catch (err: any) {
-    console.error("AniList route error:", err?.message || err);
+    logApi('error', 'anilist', err);
     return res.status(500).json({ error: "AniList API error" });
   }
 });
@@ -1439,7 +1471,263 @@ app.get("/api/mal/scores", async (req, res) => {
 });
 
 // -----------------------------------------------------------------------------
-// GET /api/mal/anime/:malId - High-Speed MAL Metadata (Mapping + Kitsu + Jikan + Scrape)
+// GET /api/mal/anime/:malId/videos - Jikan Anime Video Episodes (Titles & Thumbnails)
+// -----------------------------------------------------------------------------
+app.get("/api/mal/anime/:malId/videos", async (req, res) => {
+  const malId = parseInt(req.params.malId, 10);
+  if (isNaN(malId)) return res.status(400).json({ error: "Invalid MAL ID" });
+
+  const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+  const cacheKey = `mal_videos_${malId}_page_${page}`;
+  const cached = getCached(cacheKey);
+  if (cached) return res.json(cached);
+
+  const normalizeThumb = (ep: any): string => {
+    const candidates = [
+      ep?.images?.jpg?.large_image_url,
+      ep?.images?.jpg?.image_url,
+      ep?.images?.webp?.large_image_url,
+      ep?.images?.webp?.image_url,
+      ep?.image_url,
+    ];
+    for (const raw of candidates) {
+      if (typeof raw === 'string' && raw.trim().length > 0) {
+        const url = raw.trim().replace(/^http:\/\//i, 'https://');
+        if (
+          url.includes('questionmark') ||
+          url.includes('qm_50') ||
+          url.includes('apple-touch-icon') ||
+          url.includes('icon-banned')
+        ) {
+          continue;
+        }
+        return url;
+      }
+    }
+    return '';
+  };
+
+  try {
+    const result = await coalesce(cacheKey, async () => {
+      let episodes: any[] = [];
+      let pagination = { last_visible_page: page, has_next_page: false };
+
+      try {
+        const jikanEpVideosRes = await rateLimitedJikanGet(
+          `https://api.jikan.moe/v4/anime/${malId}/videos/episodes?page=${page}`,
+          6000
+        );
+        if (jikanEpVideosRes && jikanEpVideosRes.status === 200) {
+          const rawList = Array.isArray(jikanEpVideosRes.data?.data) ? jikanEpVideosRes.data.data : [];
+          episodes = rawList
+            .map((ep: any) => {
+              let epNum = Number(ep?.mal_id);
+              if (!Number.isFinite(epNum) || epNum <= 0) {
+                epNum = 0;
+                if (typeof ep?.episode === 'string') {
+                  const m = ep.episode.match(/(\d+)/);
+                  if (m) epNum = parseInt(m[1], 10);
+                }
+              }
+              return {
+                num: epNum,
+                thumbnail: normalizeThumb(ep),
+                url: ep.url || ''
+              };
+            })
+            .filter((ep: any) => ep.num > 0);
+
+          pagination = {
+            last_visible_page: Number(jikanEpVideosRes.data?.pagination?.last_visible_page) || page,
+            has_next_page: Boolean(jikanEpVideosRes.data?.pagination?.has_next_page),
+          };
+        }
+      } catch (err) {
+        logApi('warn', 'jikan-thumbs', err);
+      }
+
+      const data = { episodes, pagination };
+      setCached(cacheKey, data, 1000 * 60 * 60 * 6); // 6 hours
+      return data;
+    });
+
+    return res.json(result);
+  } catch (err: any) {
+    return res.json({ episodes: [], pagination: { last_visible_page: page, has_next_page: false } });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// GET /api/mal/anime/:malId/episodes - Direct MyAnimeList Episode Page Scraper
+// Scrapes: https://myanimelist.net/anime/{malId}/{romaji_slug}/episode
+// Extracts: Episode number, English title, Romaji/Japanese title, Aired (DD/MM/YYYY)
+// -----------------------------------------------------------------------------
+const MAL_MONTH_MAP: Record<string, string> = {
+  jan: '01',
+  feb: '02',
+  mar: '03',
+  apr: '04',
+  may: '05',
+  jun: '06',
+  jul: '07',
+  aug: '08',
+  sep: '09',
+  oct: '10',
+  nov: '11',
+  dec: '12',
+};
+
+function buildMalRomajiSlug(rawTitle?: string): string {
+  if (!rawTitle || typeof rawTitle !== 'string') return '_';
+  const slug = rawTitle
+    .trim()
+    .replace(/[^A-Za-z0-9\s_-]+/g, ' ')
+    .trim()
+    .replace(/[\s]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return slug || '_';
+}
+
+function formatMalAirDateDDMMYYYY(rawDate: string): string {
+  const trimmed = (rawDate || '').trim();
+  if (!trimmed || trimmed.toUpperCase() === 'N/A' || trimmed === '?') return '';
+
+  // Standard MAL format: "Jan 11, 2026" or "Feb 1, 2026"
+  const m = trimmed.match(/^([A-Za-z]{3})\s+(\d{1,2}),\s*(\d{4})$/);
+  if (m) {
+    const month = MAL_MONTH_MAP[m[1].toLowerCase()];
+    if (month) {
+      const day = m[2].padStart(2, '0');
+      const year = m[3];
+      return `${day}/${month}/${year}`;
+    }
+  }
+
+  // Fallback for any other valid full date string
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) {
+    const day = String(parsed.getDate()).padStart(2, '0');
+    const month = String(parsed.getMonth() + 1).padStart(2, '0');
+    const year = String(parsed.getFullYear());
+    return `${day}/${month}/${year}`;
+  }
+
+  return '';
+}
+
+app.get("/api/mal/anime/:malId/episodes", async (req, res) => {
+  const rawMalId = String(req.params.malId || '').trim();
+  if (!/^\d+$/.test(rawMalId)) {
+    return res.status(400).json({ error: "Invalid MAL ID" });
+  }
+  const malId = parseInt(rawMalId, 10);
+  if (!Number.isFinite(malId) || malId <= 0) {
+    return res.status(400).json({ error: "Invalid MAL ID" });
+  }
+
+  const rawOffset = parseInt(String(req.query.offset ?? '0'), 10);
+  const offset = Number.isFinite(rawOffset) && rawOffset >= 0 ? Math.floor(rawOffset / 100) * 100 : 0;
+  const page = Math.floor(offset / 100) + 1;
+  const slug = buildMalRomajiSlug(typeof req.query.title === 'string' ? req.query.title : undefined);
+
+  const cacheKey = `mal_scraped_episodes_${malId}_${offset}`;
+  const cached = getCached(cacheKey);
+  if (cached) return res.json(cached);
+
+  try {
+    const result = await coalesce(cacheKey, async () => {
+      const baseUrl = `https://myanimelist.net/anime/${malId}/${encodeURIComponent(slug)}/episode`;
+      const targetUrl = offset > 0 ? `${baseUrl}?offset=${offset}` : baseUrl;
+
+      try {
+        const malRes = await axios.get(targetUrl, {
+          timeout: 8000,
+          maxRedirects: 5,
+          validateStatus: () => true,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+          }
+        });
+
+        if (malRes.status === 200 && typeof malRes.data === 'string') {
+          const $ = cheerio.load(malRes.data);
+          const table = $('table.mt8.episode_list.js-watch-episode-list').first().length
+            ? $('table.mt8.episode_list.js-watch-episode-list').first()
+            : $('table.episode_list').first();
+
+          const episodes: { num: number; title: string; jpTitle: string; aired: string }[] = [];
+
+          table.find('tr.episode-list-data').each((_, row) => {
+            const $row = $(row);
+            const epNumText = $row.find('td.episode-number').first().text().trim();
+            const epNum = parseInt(epNumText, 10);
+            if (!Number.isFinite(epNum) || epNum <= 0) return;
+
+            const $titleTd = $row.find('td.episode-title').first();
+            const engTitle = $titleTd.find('a').first().text().trim();
+            const jpTitle =
+              $titleTd.find('span.di-ib').first().text().trim() ||
+              $titleTd.find('span').not('.icon-episode-type-bg').first().text().trim();
+
+            const rawAired = $row.find('td.episode-aired').first().text().trim();
+            const aired = formatMalAirDateDDMMYYYY(rawAired);
+
+            episodes.push({
+              num: epNum,
+              title: engTitle,
+              jpTitle,
+              aired,
+            });
+          });
+
+          // Detect if there is a next 100-episode page via MAL's pagination links
+          const nextOffset = offset + 100;
+          let hasNextPage = false;
+          $('.pagination a').each((_, el) => {
+            const href = $(el).attr('href') || '';
+            if (href.includes(`offset=${nextOffset}`)) {
+              hasNextPage = true;
+            }
+          });
+          if (!hasNextPage && episodes.length >= 100) {
+            hasNextPage = true;
+          }
+
+          const scraped = {
+            episodes,
+            pagination: {
+              last_visible_page: hasNextPage ? page + 1 : page,
+              has_next_page: hasNextPage,
+            },
+          };
+
+          if (episodes.length > 0) {
+            setCached(cacheKey, scraped, 1000 * 60 * 60 * 6); // 6 hours
+          } else {
+            setCached(cacheKey, scraped, 1000 * 60 * 5);
+          }
+          return scraped;
+        }
+      } catch (err: any) {
+        logApi('warn', 'mal-episodes', err);
+      }
+
+      const empty = { episodes: [], pagination: { last_visible_page: page, has_next_page: false } };
+      setCached(cacheKey, empty, 1000 * 60 * 2);
+      return empty;
+    });
+
+    return res.json(result);
+  } catch (err: any) {
+    return res.status(500).json({ episodes: [], pagination: { last_visible_page: page, has_next_page: false } });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// GET /api/mal/anime/:malId - High-Speed MAL Metadata (Mapping + Kitsu + Jikan)
 // -----------------------------------------------------------------------------
 app.get("/api/mal/anime/:malId", async (req, res) => {
   const malId = parseInt(req.params.malId, 10);
@@ -1576,149 +1864,6 @@ app.get("/api/mal/anime/:malId", async (req, res) => {
 });
 
 // -----------------------------------------------------------------------------
-// GET /api/mal/anime/:malId/episodes - Triple-Redundant Fast Episodes List
-// -----------------------------------------------------------------------------
-app.get("/api/mal/anime/:malId/episodes", async (req, res) => {
-  const malId = parseInt(req.params.malId, 10);
-  if (isNaN(malId)) return res.status(400).json({ error: "Invalid MAL ID" });
-
-  const offset = parseInt(req.query.offset as string, 10) || 0;
-  const cacheKey = `mal_episodes_${malId}_${offset}`;
-  const cached = getCached(cacheKey);
-  if (cached) return res.json(cached);
-
-  try {
-    const result = await coalesce(cacheKey, async () => {
-      // 1. Try Jikan Episodes API (returns 100 clean episodes)
-      try {
-        const page = Math.floor(offset / 100) + 1;
-        const jikanRes = await rateLimitedJikanGet(`https://api.jikan.moe/v4/anime/${malId}/episodes?page=${page}`, 4500);
-
-        if (jikanRes && jikanRes.status === 200 && Array.isArray(jikanRes.data?.data) && jikanRes.data.data.length > 0) {
-          const episodes = jikanRes.data.data.map((ep: any) => {
-            let airedStr = '';
-            if (ep.aired) {
-              try {
-                airedStr = new Date(ep.aired).toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                  timeZone: 'UTC'
-                });
-              } catch {
-                airedStr = ep.aired;
-              }
-            }
-            return {
-              num: ep.mal_id,
-              title: ep.title || ep.title_romanji || `Episode ${ep.mal_id}`,
-              aired: airedStr
-            };
-          });
-
-          const result = { episodes };
-          setCached(cacheKey, result, 1000 * 60 * 60 * 4); // 4 hours
-          return result;
-        }
-      } catch {}
-
-      // 2. Try Kitsu Episodes fallback
-      try {
-        let mapping = malToMapping.get(malId);
-        if (!mapping && malToMapping.size === 0) {
-          await preloadAnimeMappings();
-          mapping = malToMapping.get(malId);
-        }
-
-        let kitsuId = mapping?.kitsu_id;
-        if (!kitsuId) {
-          const kitsuMapRes = await axios.get(`https://kitsu.io/api/edge/mappings?filter[externalSite]=myanimelist/anime&filter[externalId]=${malId}&include=item`, {
-            timeout: 3000
-          });
-          kitsuId = kitsuMapRes.data?.included?.[0]?.id;
-        }
-
-        if (kitsuId) {
-          const kitsuEpRes = await axios.get(`https://kitsu.io/api/edge/anime/${kitsuId}/episodes?page[limit]=20&page[offset]=${offset}`, {
-            timeout: 3000
-          });
-          if (Array.isArray(kitsuEpRes.data?.data) && kitsuEpRes.data.data.length > 0) {
-            const episodes = kitsuEpRes.data.data.map((item: any) => {
-              const attr = item.attributes;
-              let airedStr = '';
-              if (attr.airdate) {
-                try {
-                  airedStr = new Date(attr.airdate).toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric'
-                  });
-                } catch {
-                  airedStr = attr.airdate;
-                }
-              }
-              return {
-                num: attr.number || 1,
-                title: attr.canonicalTitle || `Episode ${attr.number || 1}`,
-                aired: airedStr
-              };
-            });
-
-            const result = { episodes };
-            setCached(cacheKey, result, 1000 * 60 * 60 * 4);
-            return result;
-          }
-        }
-      } catch {}
-
-      // 3. Fallback to HTML Scraping
-      const url = `https://myanimelist.net/anime/${malId}/a/episode?offset=${offset}`;
-      try {
-        const response = await axios.get(url, {
-          timeout: 4500,
-          validateStatus: () => true,
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
-        });
-
-        if (response.status === 200) {
-          const html = response.data;
-          const $ = cheerio.load(html);
-          const episodes: any[] = [];
-
-          $('table.episode_list tbody tr.episode-list-data').each((_, element) => {
-            const epNum = $(element).find('td.episode-number').text().trim();
-            const title = $(element).find('td.episode-title a.fl-l.fw-b').text().trim();
-            const aired = $(element).find('td.episode-aired').text().trim();
-
-            if (epNum && title) {
-              episodes.push({
-                num: parseInt(epNum, 10),
-                title: title,
-                aired: aired === 'N/A' ? '' : aired
-              });
-            }
-          });
-
-          const result = { episodes };
-          setCached(cacheKey, result, 1000 * 60 * 60 * 2);
-          return result;
-        }
-      } catch (error) {
-        console.warn("MAL Scrape Error (Episodes):", error);
-      }
-
-      const empty = { episodes: [] };
-      setCached(cacheKey, empty, 1000 * 60 * 10);
-      return empty;
-    });
-
-    return res.json(result);
-  } catch (err: any) {
-    return res.status(500).json({ episodes: [] });
-  }
-});
-
-// -----------------------------------------------------------------------------
 // Kitsu API Proxies (with Caching & Timeouts)
 // -----------------------------------------------------------------------------
 app.get("/api/kitsu/mappings/:malId", async (req, res) => {
@@ -1737,30 +1882,6 @@ app.get("/api/kitsu/mappings/:malId", async (req, res) => {
     });
 
     setCached(cacheKey, response.data, 1000 * 60 * 60 * 6);
-    return res.json(response.data);
-  } catch (error: any) {
-    return res.status(500).json({ error: error.message });
-  }
-});
-
-app.get("/api/kitsu/anime/:kitsuId/episodes", async (req, res) => {
-  try {
-    const { kitsuId } = req.params;
-    const limit = req.query.limit || 20;
-    const offset = req.query.offset || 0;
-    const cacheKey = `kitsu_episodes_${kitsuId}_${limit}_${offset}`;
-    const cached = getCached(cacheKey);
-    if (cached) return res.json(cached);
-
-    const response = await axios.get(`https://kitsu.io/api/edge/anime/${kitsuId}/episodes?page[limit]=${limit}&page[offset]=${offset}`, {
-      timeout: 4000,
-      headers: {
-        'Accept': 'application/vnd.api+json',
-        'Content-Type': 'application/vnd.api+json'
-      }
-    });
-
-    setCached(cacheKey, response.data, 1000 * 60 * 60 * 4);
     return res.json(response.data);
   } catch (error: any) {
     return res.status(500).json({ error: error.message });

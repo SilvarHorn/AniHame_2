@@ -86,8 +86,8 @@ export default function NHentaiGallery() {
         const res = await fetch(`/api/nhentai/galleries/${id}`);
         const data = await res.json();
         setGallery(data);
-      } catch (e) {
-        console.error(e);
+      } catch {
+        // Gallery unavailable
       }
       setLoading(false);
     };

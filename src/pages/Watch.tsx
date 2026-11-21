@@ -4,47 +4,79 @@ import { fetchAnilist, ANIME_DETAILS_QUERY, isHanimeMode } from '../api/anilist'
 import { AnimeMedia } from '../types';
 import { saveProgress } from '../store/progress';
 import { ChevronLeft, ChevronRight, ChevronDown, ArrowDownUp, LayoutGrid, List as ListIcon, PlayCircle, ExternalLink, SlidersHorizontal, Server } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
-import { useAuth, WatchServerType, DEFAULT_SERVER_ORDER } from '../contexts/AuthContext';
+import { useAuth, WatchServerType, DEFAULT_SERVER_ORDER, sanitizeServerOrder, getPreferredAnimeTitle, getPreferredEpisodeTitle } from '../contexts/AuthContext';
 import { MarqueeText } from '../components/MarqueeText';
 import { AnimeInfo } from '../components/ui/AnimeInfo';
 import { ServerOrderModal } from '../components/player/ServerOrderModal';
+import { jikanClient, JikanEpisodeThumb } from '../api/jikan';
+import { malClient, MalScrapedEpisode } from '../api/mal';
+import { appLog } from '../lib/logger';
+
+const SERIES_SERVER_SESSION_KEY = 'anihame_series_server';
+const VALID_WATCH_SERVERS = new Set<string>(DEFAULT_SERVER_ORDER);
+
+function readSeriesServer(animeId: number): WatchServerType | null {
+  try {
+    const raw = sessionStorage.getItem(SERIES_SERVER_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (Number(parsed?.animeId) === animeId && typeof parsed?.server === 'string' && VALID_WATCH_SERVERS.has(parsed.server)) {
+      return parsed.server as WatchServerType;
+    }
+  } catch {}
+  return null;
+}
+
+function saveSeriesServer(animeId: number, server: WatchServerType | null): void {
+  try {
+    if (!server) {
+      sessionStorage.removeItem(SERIES_SERVER_SESSION_KEY);
+    } else {
+      sessionStorage.setItem(SERIES_SERVER_SESSION_KEY, JSON.stringify({ animeId, server }));
+    }
+  } catch {}
+}
 
 export default function Watch() {
   const { profile, updatePreferences } = useAuth();
   const { id, ep } = useParams();
+  const animeId = Number(id);
+  const currentEp = Number(ep) || 1;
+
+  // Compute default server from settings
+  const resolvedDefaultServer = React.useMemo<WatchServerType>(() => {
+    const raw = profile?.preferences?.defaultServer;
+    if (raw === 'megaplayz') return 'mal';
+    if (raw && VALID_WATCH_SERVERS.has(raw)) {
+      return raw as WatchServerType;
+    }
+    return 'filmu';
+  }, [profile?.preferences?.defaultServer]);
+
   const [anime, setAnime] = useState<AnimeMedia | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [sortDesc, setSortDesc] = useState(false);
   const [isListView, setIsListView] = useState(false);
-  const [episodeChunk, setEpisodeChunk] = useState(0);
-  const [audioType, setAudioType] = useState<'sub' | 'dub'>('sub');
-  const [serverType, setServerType] = useState<WatchServerType>(() => {
-    try {
-      const stored = localStorage.getItem('app_user_profile_data');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        const pref = parsed?.preferences?.defaultServer;
-        if (pref === 'megaplayz') return 'mal';
-        if (pref && ['filmu', 'mal', 'vidc', 'anime', 'animepahe', 'tryembed', 'kozo', 'vidsrc'].includes(pref)) {
-          return pref as WatchServerType;
-        }
-      }
-    } catch (e) {}
-    return 'filmu';
+  const [episodeChunk, setEpisodeChunk] = useState(() => Math.max(0, Math.floor((currentEp - 1) / 25)));
+  const [audioType, setAudioType] = useState<'sub' | 'dub'>(() => profile?.preferences?.defaultAudio || 'sub');
+  const [serverType, setServerType] = useState<WatchServerType | 'zhentube'>(() => {
+    if (isHanimeMode()) return 'zhentube';
+    const sessionSrv = animeId ? readSeriesServer(animeId) : null;
+    if (sessionSrv) return sessionSrv;
+    return resolvedDefaultServer;
   });
   const [vidcUseMal, setVidcUseMal] = useState(false);
   const [isServerOrderModalOpen, setIsServerOrderModalOpen] = useState(false);
-  const activeAnimeIdRef = useRef<number | null>(null);
-  const manualServerChoiceRef = useRef<WatchServerType | null>(null);
+  const activeAnimeIdRef = useRef<number | null>(animeId || null);
+  const manualServerChoiceRef = useRef<WatchServerType | null>(animeId ? readSeriesServer(animeId) : null);
   const [imdbId, setImdbId] = useState<string | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [malId, setMalId] = useState<number | null>(null);
-  const [kitsuId, setKitsuId] = useState<string | null>(null);
-  const [kitsuEpisodes, setKitsuEpisodes] = useState<any[]>([]);
-  const [malEpisodes, setMalEpisodes] = useState<any[]>([]);
-  const [fillerEpisodes, setFillerEpisodes] = useState<number[]>([]);
+  const [malEpisodes, setMalEpisodes] = useState<MalScrapedEpisode[]>([]);
+  const [episodeThumbs, setEpisodeThumbs] = useState<JikanEpisodeThumb[]>([]);
   const [watchedEpisodes, setWatchedEpisodes] = useState<number[]>([]);
   const [malTitle, setMalTitle] = useState<string | null>(null);
   const [zhenTubeUrl, setZhenTubeUrl] = useState<string | null>(null);
@@ -60,41 +92,33 @@ export default function Watch() {
   const [isZhenTubeLoading, setIsZhenTubeLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const animeId = Number(id);
-  const currentEp = Number(ep);
-
-  // Compute default server from settings (default server used for everything)
-  const resolvedDefaultServer = React.useMemo<WatchServerType>(() => {
-    const raw = profile?.preferences?.defaultServer;
-    if (raw === 'megaplayz') return 'mal';
-    if (raw && (['filmu', 'mal', 'vidc', 'anime', 'animepahe', 'tryembed', 'kozo', 'vidsrc'] as string[]).includes(raw)) {
-      return raw as WatchServerType;
-    }
-    return 'filmu';
-  }, [profile?.preferences?.defaultServer]);
-
   // Server lifecycle management:
-  // "when a server is manually changed for a anime keep the same server until the website the reload or moved to an different anime and come back. use the default server in the setting for everthing."
+  // Keep selected server unchanged when switching episodes in the same series;
+  // allow resetting to default server when navigating to a different series.
   useEffect(() => {
     if (!animeId) return;
 
     if (activeAnimeIdRef.current !== animeId) {
-      // Moved to a different anime (or initial anime load in this session)
       activeAnimeIdRef.current = animeId;
-      manualServerChoiceRef.current = null; // Clear manual override!
       setVidcUseMal(false);
-      setServerType(resolvedDefaultServer);
-    } else {
-      // Still on the same anime (e.g. changing episodes)
-      if (manualServerChoiceRef.current) {
-        setServerType(manualServerChoiceRef.current);
+
+      if (isHanimeMode()) {
+        manualServerChoiceRef.current = null;
+        setServerType('zhentube');
+        return;
+      }
+
+      const savedForThisSeries = readSeriesServer(animeId);
+      if (savedForThisSeries) {
+        manualServerChoiceRef.current = savedForThisSeries;
+        setServerType(savedForThisSeries);
+      } else {
+        manualServerChoiceRef.current = null;
+        saveSeriesServer(animeId, null);
+        setServerType(resolvedDefaultServer);
       }
     }
   }, [animeId, resolvedDefaultServer]);
-
-  useEffect(() => {
-    setVidcUseMal(false);
-  }, [animeId, currentEp]);
 
   // Synchronize audio preferences
   useEffect(() => {
@@ -105,6 +129,9 @@ export default function Watch() {
 
   const handleSelectServer = (chosenServer: WatchServerType) => {
     manualServerChoiceRef.current = chosenServer;
+    if (animeId) {
+      saveSeriesServer(animeId, chosenServer);
+    }
     if (chosenServer !== 'vidc') {
       setVidcUseMal(false);
     }
@@ -112,20 +139,11 @@ export default function Watch() {
   };
 
   const serverOrder: WatchServerType[] = React.useMemo(() => {
-    const custom = profile?.preferences?.serverOrder;
-    if (Array.isArray(custom) && custom.length > 0) {
-      // Ensure all servers are included
-      const list = [...custom];
-      DEFAULT_SERVER_ORDER.forEach(s => {
-        if (!list.includes(s)) list.push(s);
-      });
-      return list;
-    }
-    return DEFAULT_SERVER_ORDER;
+    return sanitizeServerOrder(profile?.preferences?.serverOrder);
   }, [profile?.preferences?.serverOrder]);
 
   const handleSaveServerOrder = async (newOrder: WatchServerType[]) => {
-    await updatePreferences({ serverOrder: newOrder });
+    await updatePreferences({ serverOrder: sanitizeServerOrder(newOrder) });
   };
 
   // Anti-hijack protection specifically for the Megaplay server
@@ -183,11 +201,24 @@ export default function Watch() {
     }
   }, [currentEp, animeId]);
 
+  // Load anime details and ID mapping ONLY when animeId changes (not on episode switch!)
   useEffect(() => {
+    if (!animeId) return;
+    let isCancelled = false;
+
+    setLoading(true);
+    setError('');
+    setMalEpisodes([]);
+    setEpisodeThumbs([]);
+    setMalId(null);
+    setImdbId(null);
+    setMalTitle(null);
+
     const loadDetails = async () => {
-      setError('');
       try {
         const data = await fetchAnilist(ANIME_DETAILS_QUERY, { id: animeId });
+        if (isCancelled) return;
+
         if (data?.Media) {
           if (data.Media.isAdult && !isHanimeMode()) {
             setError('Content restricted.');
@@ -195,140 +226,97 @@ export default function Watch() {
           }
           setAnime(data.Media);
 
-          const aTitle = data.Media.title.english || data.Media.title.romaji;
-          if (aTitle) {
-            const formattedName = aTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-            fetch(`/api/filler/${formattedName}`)
-              .then(res => res.json())
-              .then(d => {
-                if (d.fillerEpisodes) setFillerEpisodes(d.fillerEpisodes);
-              })
-              .catch(console.error);
+          // Set MAL ID immediately if AniList already provides it (don't wait for mapping)
+          if (data.Media.idMal) {
+            setMalId(data.Media.idMal);
           }
 
-          // Fetch mapping
+          // Fetch mapping for IMDb ID (VidSrc) and fallback MAL ID
           fetch(`/api/mapping/${animeId}`)
-            .then(res => res.json())
-            .then(async mapping => {
-              let iId = null;
-              if (mapping && mapping.imdb_id && mapping.imdb_id.length > 0) {
-                iId = Array.isArray(mapping.imdb_id) ? mapping.imdb_id[0] : mapping.imdb_id;
+            .then(res => (res.ok ? res.json() : null))
+            .then(mapping => {
+              if (isCancelled || !mapping) return;
+              if (mapping.imdb_id && mapping.imdb_id.length > 0) {
+                const iId = Array.isArray(mapping.imdb_id) ? mapping.imdb_id[0] : mapping.imdb_id;
                 setImdbId(iId);
               }
-              if (mapping && mapping.mal_id && !data.Media.idMal) {
+              if (mapping.mal_id && !data.Media.idMal) {
                 const malNum = Number(mapping.mal_id);
                 if (!isNaN(malNum) && malNum > 0) {
-                  setAnime(prev => prev ? { ...prev, idMal: malNum } : prev);
-                }
-              }
-              
-              const malId = data.Media.idMal || (mapping?.mal_id ? Number(mapping.mal_id) : null);
-              if (malId) {
-                setMalId(malId);
-                if (!data.Media.format) {
-                  import('../api/mal').then(({ malClient }) => {
-                    malClient.getAnimeType(malId).then(malType => {
-                      if (malType) {
-                        setAnime(prev => prev ? { ...prev, format: malType.toUpperCase() } : prev);
-                      }
-                    }).catch(() => {});
-                  }).catch(() => {});
-                }
-
-                let epCount = data.Media.episodes || 12;
-                if (data.Media.nextAiringEpisode) {
-                  epCount = data.Media.nextAiringEpisode.episode - 1;
-                }
-
-                const currentEpNum = isNaN(currentEp) ? 1 : currentEp;
-                const pStart = Math.max(1, Math.floor((currentEpNum - 1) / 100) * 100 + 1);
-                const pEnd = pStart + 99;
-
-                // 1. Fetch episode release dates from Jikan API
-                import('../api/jikan').then(({ jikanClient }) => {
-                  jikanClient.getEpisodes(
-                    malId,
-                    { start: pStart, end: pEnd },
-                    (newEps) => {
-                      setMalEpisodes([...newEps]);
-                    }
-                  ).catch(() => {});
-                }).catch(() => {});
-
-                // 2. Fetch episode thumbnails & titles from Kitsu
-                try {
-                  const { kitsuClient } = await import('../api/kitsu');
-                  const resolvedKitsuId = await kitsuClient.getKitsuIdByMalId(malId);
-                  if (resolvedKitsuId) {
-                    setKitsuId(resolvedKitsuId);
-                    const epData = await kitsuClient.getEpisodes(
-                      resolvedKitsuId,
-                      { start: pStart, end: pEnd },
-                      (newEps) => {
-                        setKitsuEpisodes([...newEps]);
-                      }
-                    );
-                    if (epData && epData.length > 0) {
-                      setKitsuEpisodes([...epData]);
-                    }
-                  }
-                } catch (e) {
-                  console.error('Watch episode fetch error', e);
+                  setAnime(prev => (prev ? { ...prev, idMal: malNum } : prev));
+                  setMalId(malNum);
                 }
               }
             })
-            .catch(err => console.error("Failed to fetch mapping", err));
-          
-          // Save to progress
-          saveProgress({
-            animeId: data.Media.id,
-            animeTitle: data.Media.title.english || data.Media.title.romaji,
-            coverImage: data.Media.coverImage.extraLarge,
-            lastEpisodeWatched: currentEp,
-            timestamp: Date.now()
-          });
+            .catch(() => {});
         } else {
           setError('Anime not found.');
         }
       } catch (err) {
-        console.error('Error fetching details:', err);
-        setError('Failed to load video details.');
+        if (!isCancelled) {
+          appLog.error('watch:details', err);
+          setError('Failed to load video details.');
+        }
       } finally {
-        setLoading(false);
+        if (!isCancelled) {
+          setLoading(false);
+        }
       }
     };
 
-    if (animeId) loadDetails();
-  }, [animeId, currentEp]);
+    loadDetails();
+    return () => {
+      isCancelled = true;
+    };
+  }, [animeId]);
 
+  // Save watch progress whenever anime or current episode changes
   useEffect(() => {
-    if (episodeChunk !== undefined) {
-      const pStart = episodeChunk * 100 + 1;
-      const pEnd = pStart + 99;
-      if (malId) {
-        import('../api/jikan').then(({ jikanClient }) => {
-          jikanClient.getEpisodes(malId, { start: pStart, end: pEnd }, (newEps) => {
-            setMalEpisodes(prev => {
-              const map = new Map(prev.map((e: any) => [e.num, e]));
-              newEps.forEach((e: any) => map.set(e.num, e));
-              return Array.from(map.values()).sort((a: any, b: any) => a.num - b.num);
-            });
-          }).catch(() => {});
-        });
-      }
-      if (kitsuId) {
-        import('../api/kitsu').then(({ kitsuClient }) => {
-          kitsuClient.getEpisodes(kitsuId, { start: pStart, end: pEnd }, (newEps) => {
-            setKitsuEpisodes(prev => {
-              const map = new Map(prev.map((e: any) => [e.num, e]));
-              newEps.forEach((e: any) => map.set(e.num, e));
-              return Array.from(map.values()).sort((a: any, b: any) => a.num - b.num);
-            });
-          });
-        });
-      }
+    if (anime && anime.id === animeId && currentEp) {
+      const lang = profile?.preferences?.titleLanguage || 'english';
+      saveProgress({
+        animeId: anime.id,
+        animeTitle: getPreferredAnimeTitle(anime.title, lang, isHanimeMode()),
+        coverImage: anime.coverImage.extraLarge,
+        lastEpisodeWatched: currentEp,
+        timestamp: Date.now()
+      });
     }
-  }, [malId, kitsuId, episodeChunk]);
+  }, [anime, animeId, currentEp, profile?.preferences?.titleLanguage]);
+
+  // Fetch episode titles + DD/MM/YYYY air dates ONLY from MAL episode page scraper,
+  // and episode thumbnails ONLY from Jikan /videos/episodes for the active 25-episode chunk
+  useEffect(() => {
+    if (!malId || !anime) return;
+    let isCancelled = false;
+
+    const pStart = episodeChunk * 25 + 1;
+    const maxKnownEp = anime.nextAiringEpisode
+      ? anime.nextAiringEpisode.episode - 1
+      : (anime.episodes || pStart + 24);
+    const pEnd = Math.min(pStart + 24, Math.max(pStart, maxKnownEp));
+    const romajiTitle = anime.title.romaji || anime.title.english || '';
+
+    malClient
+      .getEpisodesForRange(malId, romajiTitle, { start: pStart, end: pEnd }, (eps) => {
+        if (!isCancelled) {
+          setMalEpisodes(eps);
+        }
+      })
+      .catch(() => {});
+
+    jikanClient
+      .getThumbnailsForRange(malId, { start: pStart, end: pEnd }, (thumbs) => {
+        if (!isCancelled) {
+          setEpisodeThumbs(thumbs);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [malId, episodeChunk, anime?.title?.romaji, anime?.episodes, anime?.nextAiringEpisode?.episode]);
 
   useEffect(() => {
     if (isHanimeMode() && anime?.idMal) {
@@ -337,7 +325,7 @@ export default function Watch() {
         .then(data => {
           if (data.title) setMalTitle(data.title);
         })
-        .catch(console.error);
+        .catch(() => {});
     }
   }, [anime]);
 
@@ -359,7 +347,7 @@ export default function Watch() {
             setZhenTubeUrl(data.src);
           }
         })
-        .catch(err => console.error('ZhenTube error:', err))
+        .catch(() => {})
         .finally(() => setIsZhenTubeLoading(false));
     }
   }, [serverType, anime, currentEp]);
@@ -525,59 +513,34 @@ export default function Watch() {
     }
   };
 
+  const titleLanguage = profile?.preferences?.titleLanguage || 'english';
+  const showEpisodeDate = profile?.preferences?.showEpisodeDate !== false;
+  const displayAnimeTitle = malTitle || getPreferredAnimeTitle(anime.title, titleLanguage, isHanimeMode());
+
   const episodeTitleMap = new Map<number, string>();
   const episodeThumbMap = new Map<number, string>();
   const episodeAiredMap = new Map<number, string>();
   
-  // 1. Fallback 2: AniList streaming episodes
-  if (anime?.streamingEpisodes) {
-    anime.streamingEpisodes.forEach(episode => {
-      const match = episode.title.match(/Episode\s+(\d+)(?:[\s\-:]+(.*))?/i);
-      if (match) {
-        const epNum = parseInt(match[1]);
-        const aniListTitle = match[2]?.trim();
-        
-        if (aniListTitle && !aniListTitle.match(/^Episode\s+\d+$/i)) {
-          episodeTitleMap.set(epNum, aniListTitle);
-        } else if (episode.title && !episode.title.match(/^Episode\s+\d+$/i)) {
-          episodeTitleMap.set(epNum, episode.title);
-        }
-
-        if (episode.thumbnail) {
-          episodeThumbMap.set(epNum, episode.thumbnail);
-        }
-      } else {
-        const titleMatch = episode.title.match(/(.*)/);
-        if (titleMatch && anime.format === 'MOVIE') {
-          episodeTitleMap.set(1, episode.title);
-          if (episode.thumbnail) episodeThumbMap.set(1, episode.thumbnail);
-        }
-      }
-    });
-  }
-
-  // 2. Fallback 1: Kitsu episodes
-  if (kitsuEpisodes && kitsuEpisodes.length > 0) {
-    kitsuEpisodes.forEach((ep: any) => {
-      if (ep.num) {
-        if (ep.title && !ep.title.match(/^Episode\s+\d+$/i)) {
-          episodeTitleMap.set(ep.num, ep.title);
-        }
-        if (ep.thumbnail) {
-          episodeThumbMap.set(ep.num, ep.thumbnail);
-        }
-      }
-    });
-  }
-
-  // 3. Primary: MAL episodes
+  // Episode titles & DD/MM/YYYY air dates exclusively from MAL episode page scraper
   if (malEpisodes && malEpisodes.length > 0) {
-    malEpisodes.forEach((ep: any) => {
-      if (ep.num && ep.title && !ep.title.match(/^Episode\s+\d+$/i)) {
-        episodeTitleMap.set(ep.num, ep.title);
+    malEpisodes.forEach((ep) => {
+      if (ep.num) {
+        const resolved = getPreferredEpisodeTitle(ep, ep.num, titleLanguage);
+        if (resolved && !resolved.match(/^Episode\s+\d+$/i)) {
+          episodeTitleMap.set(ep.num, resolved);
+        }
+        if (ep.aired) {
+          episodeAiredMap.set(ep.num, ep.aired);
+        }
       }
-      if (ep.num && ep.aired) {
-        episodeAiredMap.set(ep.num, ep.aired);
+    });
+  }
+
+  // Episode thumbnails exclusively from Jikan /videos/episodes
+  if (episodeThumbs && episodeThumbs.length > 0) {
+    episodeThumbs.forEach((ep) => {
+      if (ep.num && ep.thumbnail) {
+        episodeThumbMap.set(ep.num, ep.thumbnail);
       }
     });
   }
@@ -592,10 +555,22 @@ export default function Watch() {
           >
             <ChevronLeft size={20} />
           </Link>
-          <h1 className="text-xl md:text-2xl font-bold text-[#FBF3E5] line-clamp-1">
-            {malTitle || (isHanimeMode() ? (anime.title.romaji || anime.title.english) : (anime.title.english || anime.title.romaji))}
-            <span className="text-primary ml-2 font-medium">Episode {currentEp}</span>
-          </h1>
+          <div className="min-w-0">
+            <h1 className="text-xl md:text-2xl font-bold text-[#FBF3E5] line-clamp-1">
+              {displayAnimeTitle}
+              <span className="text-primary ml-2 font-medium">Episode {currentEp}</span>
+            </h1>
+            {(episodeTitleMap.get(currentEp) || (showEpisodeDate && episodeAiredMap.get(currentEp))) && (
+              <div className="flex items-center gap-2 text-xs text-gray-400 mt-0.5 truncate">
+                {episodeTitleMap.get(currentEp) && (
+                  <span className="truncate">{episodeTitleMap.get(currentEp)}</span>
+                )}
+                {showEpisodeDate && episodeAiredMap.get(currentEp) && (
+                  <span className="text-gray-500 shrink-0">{episodeAiredMap.get(currentEp)}</span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {isInIframe && (
@@ -612,9 +587,9 @@ export default function Watch() {
         )}
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-4 lg:gap-5 mb-12 items-start">
+      <div className="flex flex-col lg:flex-row gap-5 lg:gap-6 mb-8 items-start">
         {/* Left Side: Video Player */}
-        <div className="flex-1 flex flex-col gap-4 min-w-0">
+        <div className="w-full flex-1 flex flex-col gap-3.5 min-w-0">
           <div className="w-full bg-black rounded-xl overflow-hidden shadow-2xl shadow-black/50 border border-white/5 flex flex-col aspect-video shrink-0">
             <div className="w-full h-full relative">
               {iframeUrl ? (
@@ -712,7 +687,7 @@ export default function Watch() {
           </div>
             
           {/* Episode Navigation Bar: Next & Previous */}
-          <div className="bg-[#10141d]/75 backdrop-blur-md px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-2xl border border-white/10 shrink-0 flex items-center justify-between gap-3 shadow-lg mb-3">
+          <div className="bg-[#10141d]/75 backdrop-blur-md px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-2xl border border-white/10 shrink-0 flex items-center justify-between gap-3 shadow-lg">
             {/* Previous Episode Button */}
             {currentEp > 1 ? (
               <Link
@@ -962,172 +937,201 @@ export default function Watch() {
             </div>
           </div>
 
-          <div className="hidden lg:block mt-4">
+          <div className="hidden lg:block mt-1">
             <AnimeInfo anime={anime} />
           </div>
         </div>
 
         {/* Right Side: Episodes Section */}
-        <div className="w-full sm:max-w-[380px] md:max-w-[400px] lg:max-w-none mx-auto lg:mx-0 lg:w-[310px] xl:w-[330px] shrink-0 flex flex-col bg-[#10141d]/25 backdrop-blur-xl border border-white/10 rounded-2xl p-3 sm:p-3.5 shadow-2xl lg:self-start">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg sm:text-xl font-bold text-[#FBF3E5] flex items-center gap-2.5">
-              <span className="w-1.5 h-5 bg-primary rounded-full inline-block"></span>
+        <div className="w-full max-w-[440px] sm:max-w-[480px] mx-auto lg:mx-0 lg:w-[348px] xl:w-[372px] shrink-0 flex flex-col bg-[#10141d]/40 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-2xl lg:self-start">
+          <div className="flex items-center justify-between gap-3 mb-4 px-0.5">
+            <h2 className="text-base sm:text-lg font-bold text-[#FBF3E5] flex items-center gap-2.5">
+              <span className="w-1.5 h-5 bg-primary rounded-full inline-block shrink-0"></span>
               Episodes
             </h2>
             
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2 shrink-0">
               <button 
                 onClick={() => setIsListView(!isListView)}
-                className="p-1.5 text-gray-400 hover:text-primary transition-colors bg-white/[0.06] hover:bg-white/[0.12] rounded-lg border border-white/10"
+                className="p-2 text-gray-400 hover:text-primary transition-all duration-200 active:scale-90 bg-white/[0.06] hover:bg-white/[0.12] rounded-lg border border-white/10"
                 title="Toggle View Mode"
               >
-                {isListView ? <LayoutGrid size={16} /> : <ListIcon size={16} />}
+                {isListView ? <LayoutGrid size={15} /> : <ListIcon size={15} />}
               </button>
               <button 
                 onClick={() => setSortDesc(!sortDesc)}
-                className="p-1.5 text-gray-400 hover:text-primary transition-colors bg-white/[0.06] hover:bg-white/[0.12] rounded-lg border border-white/10"
+                className="p-2 text-gray-400 hover:text-primary transition-all duration-200 active:scale-90 bg-white/[0.06] hover:bg-white/[0.12] rounded-lg border border-white/10"
                 title="Sort Order"
               >
-                <ArrowDownUp size={16} />
+                <ArrowDownUp size={15} />
               </button>
             </div>
           </div>
           
           {totalChunks > 1 && (
-            <div className="mb-3 relative" ref={dropdownRef}>
+            <div className="mb-4 relative" ref={dropdownRef}>
               <button
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                className="w-full flex items-center justify-between bg-white/[0.06] border border-white/10 text-gray-300 rounded-lg p-2 text-xs sm:text-sm font-medium hover:bg-white/[0.1] transition-colors"
+                className="w-full flex items-center justify-between gap-2 bg-white/[0.06] border border-white/10 text-gray-300 rounded-xl py-2 px-3 text-xs font-medium hover:bg-white/[0.1] active:scale-[0.99] transition-all duration-200"
               >
                 <span>Episodes {chunks.find(c => c.index === episodeChunk)?.label}</span>
-                <ChevronDown size={14} className={cn("transition-transform", isDropdownOpen && "rotate-180")} />
+                <ChevronDown size={14} className={cn("transition-transform duration-200 shrink-0", isDropdownOpen && "rotate-180")} />
               </button>
               
-              {isDropdownOpen && (
-                <div className="mt-2 p-2 bg-[#10141d]/90 backdrop-blur-xl border border-white/10 rounded-lg shadow-xl grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-60 overflow-y-auto custom-scrollbar z-30">
-                  {chunks.map(chunk => (
-                    <button
-                      key={chunk.index}
-                      onClick={() => {
-                        setEpisodeChunk(chunk.index);
-                        setIsDropdownOpen(false);
-                      }}
-                      className={cn(
-                        "px-2 py-1.5 text-xs font-semibold rounded-lg border transition-all text-center",
-                        episodeChunk === chunk.index
-                          ? "bg-primary border-primary text-[#0B0C0F]"
-                          : "bg-white/[0.06] border-white/5 text-gray-300 hover:bg-white/[0.12] hover:text-white"
-                      )}
-                    >
-                      {chunk.label}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <AnimatePresence>
+                {isDropdownOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                    transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                    className="mt-2 p-2 bg-[#10141d]/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-xl grid grid-cols-2 gap-2 max-h-52 overflow-y-auto custom-scrollbar z-30"
+                  >
+                    {chunks.map(chunk => (
+                      <button
+                        key={chunk.index}
+                        onClick={() => {
+                          setEpisodeChunk(chunk.index);
+                          setIsDropdownOpen(false);
+                        }}
+                        className={cn(
+                          "px-2.5 py-1.5 text-xs font-semibold rounded-lg border transition-all duration-150 active:scale-95 text-center",
+                          episodeChunk === chunk.index
+                            ? "bg-primary border-primary text-[#0B0C0F]"
+                            : "bg-white/[0.06] border-white/5 text-gray-300 hover:bg-white/[0.12] hover:text-white"
+                        )}
+                      >
+                        {chunk.label}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           )}
           
-          <div className="flex-1 min-h-0 bg-black/15 border border-white/5 rounded-xl p-1.5 sm:p-2">
-            <div className={cn(
-              "gap-1.5 sm:gap-2 overflow-y-auto custom-scrollbar px-0.5 max-h-[380px] lg:max-h-[400px] pb-1",
-              isListView 
-                ? "flex flex-col gap-2" 
-                : "grid grid-cols-5"
-            )}>
+          <div className="flex-1 min-h-0 bg-black/20 border border-white/5 rounded-xl p-2.5">
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={`${isListView ? 'list' : 'grid'}-${episodeChunk}-${sortDesc ? 'desc' : 'asc'}`}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                className={cn(
+                  isListView 
+                    ? "overflow-y-auto custom-scrollbar flex flex-col gap-2.5 p-1 pr-2 max-h-[480px]" 
+                    : "grid grid-cols-5 gap-2 p-1"
+                )}
+              >
           {episodes.map(epNum => {
-            const isFiller = fillerEpisodes.includes(epNum);
             const isWatched = watchedEpisodes.includes(epNum) && epNum !== currentEp;
+            const fallbackThumb = anime.bannerImage || anime.coverImage.extraLarge || anime.coverImage.large;
+            const thumbSrc = episodeThumbMap.get(epNum) || fallbackThumb;
             return isListView ? (
               <Link
                 key={epNum}
                 to={`/watch/${anime.id}/${epNum}`}
                 className={cn(
-                  "flex items-center gap-4 hover:border-primary/50 border rounded-xl p-3 lg:min-h-[100px] lg:p-4 font-bold text-sm transition-all shadow-lg group relative overflow-hidden",
+                  "shrink-0 flex items-center gap-3 hover:border-primary/50 border rounded-xl px-3 py-2.5 font-bold text-xs transition-all shadow-lg group relative overflow-hidden",
                   epNum === currentEp 
                     ? "border-primary/50 ring-1 ring-primary/50 bg-primary/15 backdrop-blur-sm" 
-                    : isFiller 
-                      ? "bg-[#f97316]/10 hover:bg-[#f97316]/20 border-[#f97316]/30"
-                      : "bg-white/[0.04] hover:bg-white/[0.09] border-white/5 text-gray-300",
+                    : "bg-white/[0.04] hover:bg-white/[0.09] border-white/5 text-gray-300",
                   isWatched && "opacity-50 grayscale hover:grayscale-0 hover:opacity-100"
                 )}
               >
-                <div className="w-24 sm:w-32 lg:w-40 aspect-video flex-shrink-0 relative rounded-lg overflow-hidden bg-gray-900">
+                <div className="w-[76px] aspect-video flex-shrink-0 relative rounded-lg overflow-hidden bg-gray-900">
                   <img 
-                    src={episodeThumbMap.get(epNum) || anime.bannerImage || anime.coverImage.extraLarge || anime.coverImage.large} 
+                    src={thumbSrc} 
+                    referrerPolicy="no-referrer"
+                    loading="lazy"
+                    onError={(e) => {
+                      if (fallbackThumb && e.currentTarget.src !== fallbackThumb) {
+                        e.currentTarget.src = fallbackThumb;
+                      }
+                    }}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
                     alt={`Episode ${epNum}`} 
                   />
-                  {isFiller && <div className="absolute inset-0 bg-[#f97316]/20 pointer-events-none mix-blend-color" />}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mb-1">
-                    <div className="flex items-center gap-2">
-                      <span className={cn("text-lg font-black leading-tight shrink-0", epNum === currentEp ? "text-primary" : isFiller ? "text-[#f97316]" : "text-white")}>Ep {epNum}</span>
-                      {isFiller && <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full bg-[#f97316]/20 text-[#f97316] border border-[#f97316]/30 font-bold tracking-wider shrink-0">FILLER</span>}
-                    </div>
-                    <MarqueeText 
-                      text={episodeTitleMap.get(epNum) || `Episode ${epNum}`}
-                      className={cn("text-xs sm:text-sm font-medium transition-colors", isFiller ? "text-[#f97316]/80 group-hover:text-[#f97316]" : "text-gray-400 group-hover:text-white")}
-                      align="left"
-                    />
-                    {profile?.preferences?.showEpisodeDate !== false && episodeAiredMap.get(epNum) && (
-                      <div className="text-[10px] text-gray-500 mt-0.5">{episodeAiredMap.get(epNum)}</div>
-                    )}
-                  </div>
+                <div className="flex-1 min-w-0 overflow-hidden flex flex-col justify-center gap-0.5 py-0.5">
+                  <span className={cn("text-xs font-black leading-tight block", epNum === currentEp ? "text-primary" : "text-white")}>Ep {epNum}</span>
+                  <MarqueeText 
+                    text={episodeTitleMap.get(epNum) || `Episode ${epNum}`}
+                    className="text-[11px] font-medium leading-tight text-gray-400 group-hover:text-white transition-colors"
+                    align="left"
+                  />
+                  {showEpisodeDate && episodeAiredMap.get(epNum) && (
+                    <span className="text-[10px] text-gray-400 block leading-tight truncate">{episodeAiredMap.get(epNum)}</span>
+                  )}
                 </div>
-                <PlayCircle size={24} className={cn("mr-2 flex-shrink-0 transition-colors", epNum === currentEp ? "text-primary" : isFiller ? "text-[#f97316]/50 group-hover:text-[#f97316]" : "text-gray-500 group-hover:text-primary")} />
+                <PlayCircle size={16} className={cn("flex-shrink-0 transition-colors", epNum === currentEp ? "text-primary" : "text-gray-500 group-hover:text-primary")} />
               </Link>
             ) : (
               <Link
                 key={epNum}
                 to={`/watch/${anime.id}/${epNum}`}
+                title={[
+                  episodeTitleMap.get(epNum) || `Episode ${epNum}`,
+                  showEpisodeDate && episodeAiredMap.get(epNum) ? episodeAiredMap.get(epNum) : ''
+                ].filter(Boolean).join(' • ')}
                 className={cn(
                   "relative aspect-square flex-col text-center border rounded-xl flex items-center justify-center transition-all hover:scale-105 hover:-translate-y-0.5 shadow-lg overflow-hidden group",
                   epNum === currentEp 
                     ? "border-primary ring-1 ring-primary bg-primary/20 backdrop-blur-sm" 
-                    : isFiller
-                      ? "bg-[#f97316]/20 border-[#f97316]/50"
-                      : "bg-white/[0.04] hover:bg-white/[0.09] hover:border-primary border-white/5",
+                    : "bg-white/[0.04] hover:bg-white/[0.09] hover:border-primary border-white/5",
                   isWatched && "opacity-50 grayscale hover:grayscale-0 hover:opacity-100"
                 )}
               >
                 <div className="absolute inset-0 w-full h-full">
                   <img 
-                    src={episodeThumbMap.get(epNum) || anime.bannerImage || anime.coverImage.extraLarge || anime.coverImage.large} 
+                    src={thumbSrc} 
                     alt={`Episode ${epNum}`} 
+                    referrerPolicy="no-referrer"
+                    loading="lazy"
+                    onError={(e) => {
+                      if (fallbackThumb && e.currentTarget.src !== fallbackThumb) {
+                        e.currentTarget.src = fallbackThumb;
+                      }
+                    }}
                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 opacity-60 group-hover:opacity-30" 
                   />
-                  <div className={cn("absolute inset-0 opacity-80", isFiller ? "bg-gradient-to-t from-[#f97316]/40 via-[#0B0C0F]/60 to-[#f97316]/10 mix-blend-color" : "bg-gradient-to-t from-[#0B0C0F] via-[#0B0C0F]/40 to-transparent")} />
+                  <div className="absolute inset-0 opacity-80 bg-gradient-to-t from-[#0B0C0F] via-[#0B0C0F]/40 to-transparent" />
                 </div>
                 
-                <div className="relative z-10 flex flex-col items-center justify-center w-full h-full p-1 sm:p-1.5">
-                  <div className="absolute inset-0 flex flex-col items-center justify-center transition-all duration-300 group-hover:opacity-0 group-hover:scale-90">
+                <div className="relative z-10 flex flex-col items-center justify-center w-full h-full">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center px-1.5 transition-all duration-300 group-hover:opacity-0 group-hover:scale-90">
                     <span className={cn(
                       "text-xs sm:text-sm font-black drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]",
-                      epNum === currentEp ? "text-primary" : isFiller ? "text-[#f97316]" : "text-white"
+                      epNum === currentEp ? "text-primary" : "text-white"
                     )}>
                       {epNum}
                     </span>
-                    {isFiller && <span className="text-[8px] sm:text-[9px] font-bold text-[#f97316] bg-black/60 px-1 py-0.2 rounded mt-0.5 leading-none">FILLER</span>}
                   </div>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center p-1 opacity-0 group-hover:opacity-100 transition-all duration-300 scale-105 group-hover:scale-100">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 px-1.5 py-1 opacity-0 group-hover:opacity-100 transition-all duration-300 scale-105 group-hover:scale-100 overflow-hidden">
                     <MarqueeText 
                       text={episodeTitleMap.get(epNum) || `Episode ${epNum}`}
-                      className={cn("text-[9px] sm:text-[10px] font-bold text-center leading-tight", epNum === currentEp ? "text-primary" : isFiller ? "text-[#f97316]" : "text-white")}
+                      className={cn("text-[9px] sm:text-[10px] font-bold text-center leading-tight", epNum === currentEp ? "text-primary" : "text-white")}
                     />
-                    <div className="flex items-center gap-0.5 text-[9px] text-gray-300 mt-0.5">
-                      <PlayCircle size={10} className="text-primary" />
-                    </div>
+                    {showEpisodeDate && episodeAiredMap.get(epNum) ? (
+                      <span className="max-w-full truncate text-[8px] text-gray-300 leading-tight">{episodeAiredMap.get(epNum)}</span>
+                    ) : (
+                      <div className="flex items-center gap-0.5 text-[9px] text-gray-300">
+                        <PlayCircle size={10} className="text-primary" />
+                      </div>
+                    )}
                   </div>
                 </div>
               </Link>
             )
           })}
-            </div>
+              </motion.div>
+            </AnimatePresence>
           </div>
         </div>
+      </div>
 
-      <div className="block lg:hidden mt-8 mb-8">
+      <div className="block lg:hidden mb-8">
         <AnimeInfo anime={anime} />
       </div>
 
@@ -1137,8 +1141,6 @@ export default function Watch() {
         order={serverOrder}
         onSave={handleSaveServerOrder}
       />
-
-      </div>
     </div>
   );
 }

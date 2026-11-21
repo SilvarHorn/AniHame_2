@@ -3,6 +3,7 @@ import { AnimeMedia } from '../../types';
 import AnimeCard from '../ui/AnimeCard';
 import AnimeCardSkeleton from '../ui/AnimeCardSkeleton';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface TrendingGridProps {
   trending: AnimeMedia[];
@@ -80,10 +81,10 @@ export default React.memo(function TrendingGrid({ trending, country, onCountryCh
             <option value="CN">Chinese</option>
           </select>
           <div className="flex gap-2">
-            <button onClick={() => scroll(-300)} disabled={isLoading} className="p-1 bg-gray-800 rounded hover:bg-primary hover:text-black transition-colors disabled:opacity-50 disabled:hover:bg-gray-800 disabled:hover:text-white">
+            <button onClick={() => scroll(-300)} disabled={isLoading} className="p-1 bg-gray-800 rounded hover:bg-primary hover:text-black transition-all duration-200 active:scale-90 disabled:opacity-50 disabled:hover:bg-gray-800 disabled:hover:text-white">
               <ChevronLeft size={16} />
             </button>
-            <button onClick={() => scroll(300)} disabled={isLoading} className="p-1 bg-gray-800 rounded hover:bg-primary hover:text-black transition-colors disabled:opacity-50 disabled:hover:bg-gray-800 disabled:hover:text-white">
+            <button onClick={() => scroll(300)} disabled={isLoading} className="p-1 bg-gray-800 rounded hover:bg-primary hover:text-black transition-all duration-200 active:scale-90 disabled:opacity-50 disabled:hover:bg-gray-800 disabled:hover:text-white">
               <ChevronRight size={16} />
             </button>
           </div>
@@ -94,37 +95,44 @@ export default React.memo(function TrendingGrid({ trending, country, onCountryCh
         <button 
           onClick={() => scroll(-400)} 
           disabled={isLoading}
-          className="absolute left-0 top-1/2 -translate-y-1/2 -ml-4 z-10 p-2 bg-black/60 text-white rounded-full opacity-0 group-hover/trending:opacity-100 hover:bg-primary hover:text-black transition-all hidden sm:block disabled:hidden"
+          className="absolute left-0 top-1/2 -translate-y-1/2 -ml-4 z-10 p-2 bg-black/60 text-white rounded-full opacity-0 group-hover/trending:opacity-100 hover:bg-primary hover:text-black transition-all duration-200 active:scale-90 hidden sm:block disabled:hidden"
         >
           <ChevronLeft size={24} />
         </button>
         
-        <div 
-          ref={scrollRef}
-          onMouseDown={handleMouseDown}
-          onMouseLeave={handleMouseLeave}
-          onMouseUp={handleMouseUp}
-          onMouseMove={handleMouseMove}
-          onClickCapture={handleClickCapture}
-          className={`flex gap-3 overflow-x-auto pb-3 custom-scrollbar select-none ${isDragging ? 'cursor-grabbing' : 'cursor-grab snap-x snap-mandatory'}`}
-        >
-          {isLoading 
-            ? Array.from({ length: 10 }).map((_, i) => (
-                <div key={`skeleton-${i}`} className="snap-start shrink-0 w-24 sm:w-28 md:w-32 lg:w-36">
-                  <AnimeCardSkeleton index={i} />
-                </div>
-              ))
-            : trending.map((anime, i) => (
-                <div key={anime.id} className="snap-start shrink-0 w-24 sm:w-28 md:w-32 lg:w-36">
-                  <AnimeCard anime={anime} index={i} />
-                </div>
-              ))}
-        </div>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={isLoading ? 'loading' : `trending-${country}-${trending[0]?.id ?? 0}`}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+            ref={scrollRef}
+            onMouseDown={handleMouseDown}
+            onMouseLeave={handleMouseLeave}
+            onMouseUp={handleMouseUp}
+            onMouseMove={handleMouseMove}
+            onClickCapture={handleClickCapture}
+            className={`flex gap-3 overflow-x-auto pb-3 custom-scrollbar select-none ${isDragging ? 'cursor-grabbing' : 'cursor-grab snap-x snap-mandatory'}`}
+          >
+            {isLoading 
+              ? Array.from({ length: 10 }).map((_, i) => (
+                  <div key={`skeleton-${i}`} className="snap-start shrink-0 w-24 sm:w-28 md:w-32 lg:w-36">
+                    <AnimeCardSkeleton index={i} />
+                  </div>
+                ))
+              : trending.map((anime, i) => (
+                  <div key={anime.id} className="snap-start shrink-0 w-24 sm:w-28 md:w-32 lg:w-36">
+                    <AnimeCard anime={anime} index={i} />
+                  </div>
+                ))}
+          </motion.div>
+        </AnimatePresence>
         
         <button 
           onClick={() => scroll(400)} 
           disabled={isLoading}
-          className="absolute right-0 top-1/2 -translate-y-1/2 -mr-4 z-10 p-2 bg-black/60 text-white rounded-full opacity-0 group-hover/trending:opacity-100 hover:bg-primary hover:text-black transition-all hidden sm:block disabled:hidden"
+          className="absolute right-0 top-1/2 -translate-y-1/2 -mr-4 z-10 p-2 bg-black/60 text-white rounded-full opacity-0 group-hover/trending:opacity-100 hover:bg-primary hover:text-black transition-all duration-200 active:scale-90 hidden sm:block disabled:hidden"
         >
           <ChevronRight size={24} />
         </button>

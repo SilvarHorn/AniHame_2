@@ -9,6 +9,7 @@ import MultiSelect from '../components/ui/MultiSelect';
 import SingleSelect from '../components/ui/SingleSelect';
 import { motion, AnimatePresence } from 'motion/react';
 import { Filter, ChevronDown, Check, X, RotateCcw, Search as SearchIcon, Shuffle } from 'lucide-react';
+import { appLog } from '../lib/logger';
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEARS = Array.from({ length: 40 }, (_, i) => CURRENT_YEAR + 1 - i);
@@ -181,7 +182,7 @@ export default function Explore() {
         setHasNextPage(hasNext);
       } catch (err: any) {
         if (!isCurrent) return;
-        console.error('Error fetching search results:', err);
+        appLog.error('explore:search', err);
         setError('Failed to fetch anime. Please try again.');
       } finally {
         if (isCurrent) setLoading(false);
@@ -395,7 +396,7 @@ export default function Explore() {
         }
       }
     } catch (err) {
-      console.error('Error selecting random anime:', err);
+      appLog.error('explore:random', err);
       setError('Failed to pick a random anime. Please try again.');
     } finally {
       setIsPickingRandom(false);

@@ -42,8 +42,8 @@ export default function DevToolsGuard() {
       devtoolsDetector.addListener(onDevToolsChange);
       devtoolsDetector.setDetectDelay(300);
       devtoolsDetector.launch();
-    } catch (err) {
-      console.warn('DevTools detector failed to launch:', err);
+    } catch {
+      // Fallback monitoring loop remains active
     }
 
     // 3. Fallback monitoring loop

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { User, LogOut, LogIn, Save, Mail, Key, Edit3, Camera, X, Check, Square, RotateCcw, SlidersHorizontal } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Cropper from 'react-easy-crop';
-import { useAuth, WatchServerType, DEFAULT_SERVER_ORDER, DEFAULT_CARD_BORDER } from '../contexts/AuthContext';
+import { useAuth, WatchServerType, TitleLanguage, DEFAULT_SERVER_ORDER, DEFAULT_CARD_BORDER } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import AnimeCard from '../components/ui/AnimeCard';
 import { preloadAnimeThumbnails } from '../utils/imagePreload';
@@ -35,6 +35,7 @@ export default function Profile() {
   const [defaultServer, setDefaultServer] = useState<WatchServerType>('filmu');
   const [defaultAudio, setDefaultAudio] = useState<'sub' | 'dub'>('sub');
   const [showEpisodeDate, setShowEpisodeDate] = useState<boolean>(true);
+  const [titleLanguage, setTitleLanguage] = useState<TitleLanguage>('english');
   const [serverOrder, setServerOrder] = useState<WatchServerType[]>(DEFAULT_SERVER_ORDER);
   const [cardBorderMode, setCardBorderMode] = useState<'default' | 'custom'>('default');
   const [cardBorderColor, setCardBorderColor] = useState('#FBF3E5');
@@ -75,6 +76,7 @@ export default function Profile() {
       setDefaultServer((profile.preferences?.defaultServer as WatchServerType) || 'filmu');
       setDefaultAudio(profile.preferences?.defaultAudio || 'sub');
       setShowEpisodeDate(profile.preferences?.showEpisodeDate ?? true);
+      setTitleLanguage(profile.preferences?.titleLanguage === 'romaji' ? 'romaji' : 'english');
       if (profile.preferences?.serverOrder) {
         setServerOrder(profile.preferences.serverOrder);
       }
@@ -275,6 +277,7 @@ export default function Profile() {
           defaultServer,
           defaultAudio,
           showEpisodeDate,
+          titleLanguage,
           serverOrder,
           cardBorder: {
             mode: cardBorderMode,
@@ -332,6 +335,7 @@ export default function Profile() {
         defaultServer,
         defaultAudio,
         showEpisodeDate,
+        titleLanguage,
         serverOrder,
         cardBorder: {
           mode: cardBorderMode,
@@ -396,62 +400,78 @@ export default function Profile() {
   return (
     <div className="w-full p-4 sm:p-6 lg:p-8">
       {/* Crop Modal */}
-      {cropImageSrc && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4">
-          <div className="bg-[#151F2E] border border-white/10 rounded-2xl w-full max-w-md overflow-hidden flex flex-col shadow-2xl">
-            <div className="flex items-center justify-between p-4 border-b border-white/5">
-              <h3 className="text-lg font-bold text-white">Crop Profile Picture</h3>
-              <button onClick={() => setCropImageSrc('')} className="text-gray-400 hover:text-white transition-colors">
-                <X size={24} />
-              </button>
-            </div>
-            
-            <div className="relative w-full h-80 bg-black">
-              <Cropper
-                image={cropImageSrc}
-                crop={crop}
-                zoom={zoom}
-                aspect={1}
-                cropShape="round"
-                showGrid={false}
-                onCropChange={setCrop}
-                onCropComplete={onCropComplete}
-                onZoomChange={setZoom}
-              />
-            </div>
-            
-            <div className="p-4 bg-gray-900/50">
-              <div className="mb-4">
-                <label className="text-xs font-medium text-gray-400 mb-2 block">Zoom</label>
-                <input
-                  type="range"
-                  value={zoom}
-                  min={1}
-                  max={3}
-                  step={0.1}
-                  aria-labelledby="Zoom"
-                  onChange={(e) => setZoom(Number(e.target.value))}
-                  className="w-full accent-primary"
+      <AnimatePresence>
+        {cropImageSrc && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+            onClick={() => setCropImageSrc('')}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 8 }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[#151F2E] border border-white/10 rounded-2xl w-full max-w-md overflow-hidden flex flex-col shadow-2xl"
+            >
+              <div className="flex items-center justify-between p-4 border-b border-white/5">
+                <h3 className="text-lg font-bold text-white">Crop Profile Picture</h3>
+                <button onClick={() => setCropImageSrc('')} className="text-gray-400 hover:text-white transition-all active:scale-90">
+                  <X size={24} />
+                </button>
+              </div>
+              
+              <div className="relative w-full h-80 bg-black">
+                <Cropper
+                  image={cropImageSrc}
+                  crop={crop}
+                  zoom={zoom}
+                  aspect={1}
+                  cropShape="round"
+                  showGrid={false}
+                  onCropChange={setCrop}
+                  onCropComplete={onCropComplete}
+                  onZoomChange={setZoom}
                 />
               </div>
-              <div className="flex justify-end gap-3">
-                <button 
-                  onClick={() => setCropImageSrc('')}
-                  className="px-4 py-2 rounded-lg font-bold text-gray-400 hover:bg-gray-800 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button 
-                  onClick={saveCrop}
-                  className="px-4 py-2 bg-primary text-[#0B0C0F] rounded-lg font-bold hover:bg-primary-hover transition-colors"
-                >
-                  Apply Crop
-                </button>
+              
+              <div className="p-4 bg-gray-900/50">
+                <div className="mb-4">
+                  <label className="text-xs font-medium text-gray-400 mb-2 block">Zoom</label>
+                  <input
+                    type="range"
+                    value={zoom}
+                    min={1}
+                    max={3}
+                    step={0.1}
+                    aria-labelledby="Zoom"
+                    onChange={(e) => setZoom(Number(e.target.value))}
+                    className="w-full accent-primary"
+                  />
+                </div>
+                <div className="flex justify-end gap-3">
+                  <button 
+                    onClick={() => setCropImageSrc('')}
+                    className="px-4 py-2 rounded-lg font-bold text-gray-400 hover:bg-gray-800 transition-all active:scale-95"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={saveCrop}
+                    className="px-4 py-2 bg-primary text-[#0B0C0F] rounded-lg font-bold hover:bg-primary-hover transition-all active:scale-95"
+                  >
+                    Apply Crop
+                  </button>
+                </div>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       
       
@@ -799,7 +819,11 @@ export default function Profile() {
                   { label: 'VidSrc', value: 'vidsrc' }
                 ]}
                 value={defaultServer}
-                onChange={(val) => { setDefaultServer(val as WatchServerType); if(!isEditing) setIsEditing(true); }}
+                onChange={(val) => {
+                  const next = val as WatchServerType;
+                  setDefaultServer(next);
+                  updatePreferences({ defaultServer: next });
+                }}
               />
             </div>
 
@@ -811,20 +835,46 @@ export default function Profile() {
                   { label: 'Dubbed (English)', value: 'dub' }
                 ]}
                 value={defaultAudio}
-                onChange={(val) => { setDefaultAudio(val as 'sub' | 'dub'); if(!isEditing) setIsEditing(true); }}
+                onChange={(val) => {
+                  const next = val as 'sub' | 'dub';
+                  setDefaultAudio(next);
+                  updatePreferences({ defaultAudio: next });
+                }}
               />
             </div>
           </div>
           <div className="grid md:grid-cols-2 gap-6 mt-6">
+            <div className="bg-gray-900/50 p-5 rounded-xl border border-white/5">
+              <label className="block text-sm font-medium text-gray-400 mb-1">Title Language</label>
+              <p className="text-xs text-gray-500 mb-3">Applies to anime series titles and episode titles</p>
+              <SingleSelect
+                options={[
+                  { label: 'English', value: 'english' },
+                  { label: 'Romaji / Japanese', value: 'romaji' }
+                ]}
+                value={titleLanguage}
+                onChange={(val) => {
+                  const next = (val === 'romaji' ? 'romaji' : 'english') as TitleLanguage;
+                  setTitleLanguage(next);
+                  updatePreferences({ titleLanguage: next });
+                }}
+              />
+            </div>
+
             <div className="bg-gray-900/50 p-5 rounded-xl border border-white/5 flex items-center justify-between">
               <div>
                 <label className="block text-sm font-medium text-gray-400">Show Episode Release Date</label>
-                <p className="text-xs text-gray-500 mt-1">Display the aired date below episode titles</p>
+                <p className="text-xs text-gray-500 mt-1">Display the aired date (DD/MM/YYYY) below episode titles</p>
               </div>
               <button
-                onClick={() => { setShowEpisodeDate(!showEpisodeDate); if(!isEditing) setIsEditing(true); }}
+                type="button"
+                onClick={() => {
+                  const next = !showEpisodeDate;
+                  setShowEpisodeDate(next);
+                  updatePreferences({ showEpisodeDate: next });
+                }}
                 className={cn(
-                  "w-12 h-6 rounded-full transition-colors relative",
+                  "w-12 h-6 rounded-full transition-colors relative shrink-0",
                   showEpisodeDate ? "bg-primary" : "bg-gray-700"
                 )}
               >
@@ -842,7 +892,7 @@ export default function Profile() {
               order={serverOrder}
               onChange={(newOrder) => {
                 setServerOrder(newOrder);
-                if (!isEditing) setIsEditing(true);
+                updatePreferences({ serverOrder: newOrder });
               }}
             />
           </div>
@@ -896,8 +946,16 @@ export default function Profile() {
             </div>
 
             {/* Custom Settings (Color, Width, Reset) */}
+            <AnimatePresence mode="wait" initial={false}>
             {cardBorderMode === 'custom' ? (
-              <div className="grid md:grid-cols-2 gap-6 items-start">
+              <motion.div
+                key="custom-border"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                className="grid md:grid-cols-2 gap-6 items-start"
+              >
                 <div className="flex flex-col gap-4">
                   {/* Color Selector */}
                   <div>
@@ -1036,9 +1094,16 @@ export default function Profile() {
                     </div>
                   </div>
                 </div>
-              </div>
+              </motion.div>
             ) : (
-              <div className="flex items-center justify-between bg-[#12141A] p-4 rounded-lg border border-white/5 text-sm text-gray-400">
+              <motion.div
+                key="default-border"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                className="flex items-center justify-between bg-[#12141A] p-4 rounded-lg border border-white/5 text-sm text-gray-400"
+              >
                 <span>Standard subtle border (`border-white/5`) is currently enabled for all anime cards.</span>
                 <button
                   type="button"
@@ -1050,8 +1115,9 @@ export default function Profile() {
                 >
                   Enable Custom Border
                 </button>
-              </div>
+              </motion.div>
             )}
+            </AnimatePresence>
           </div>
         </div>
       </div>
@@ -1069,67 +1135,92 @@ export default function Profile() {
         </div>
         
         <div className="flex overflow-x-auto gap-2 pb-4 mb-4 custom-scrollbar">
-          {TABS.map(tab => (
-            <button
-              key={tab.value}
-              onClick={() => setActiveTab(tab.value)}
-              className={cn(
-                "whitespace-nowrap px-4 py-2 rounded-lg text-sm font-bold transition-colors",
-                activeTab === tab.value 
-                  ? 'bg-primary text-[#0B0C0F]' 
-                  : 'bg-[#151F2E] text-gray-400 hover:text-[#FBF3E5] border border-gray-800'
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
+          {TABS.map(tab => {
+            const isActive = activeTab === tab.value;
+            return (
+              <button
+                key={tab.value}
+                onClick={() => setActiveTab(tab.value)}
+                className={cn(
+                  "relative whitespace-nowrap px-4 py-2 rounded-lg text-sm font-bold transition-colors duration-200 active:scale-95",
+                  isActive 
+                    ? 'text-[#0B0C0F]' 
+                    : 'bg-[#151F2E] text-gray-400 hover:text-[#FBF3E5] border border-gray-800'
+                )}
+              >
+                {isActive && (
+                  <motion.span
+                    layoutId="profile-list-tab"
+                    transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                    className="absolute inset-0 rounded-lg bg-primary"
+                  />
+                )}
+                <span className="relative z-10">{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
 
-        {paginatedList.length > 0 ? (
-          <>
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8 gap-4 md:gap-6">
-              {paginatedList.map((item, idx) => (
-                <AnimeCard 
-                  key={item.animeId} 
-                  anime={item.anime as any} 
-                  index={idx}
-                  batchReady={batchReady}
-                />
-              ))}
-            </div>
-            {totalPages > 1 && (
-              <div className="flex justify-center items-center gap-4 mt-12">
-                <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="px-4 py-2 bg-[#151F2E] text-white rounded-lg disabled:opacity-50 hover:bg-gray-800 transition-colors font-bold text-sm"
-                >
-                  Previous
-                </button>
-                <span className="text-gray-400 font-medium">Page {page} of {totalPages}</span>
-                <button
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  className="px-4 py-2 bg-[#151F2E] text-white rounded-lg disabled:opacity-50 hover:bg-gray-800 transition-colors font-bold text-sm"
-                >
-                  Next
-                </button>
+        <AnimatePresence mode="wait">
+          {paginatedList.length > 0 ? (
+            <motion.div
+              key={`${activeTab}-${page}`}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            >
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8 gap-4 md:gap-6">
+                {paginatedList.map((item, idx) => (
+                  <AnimeCard 
+                    key={item.animeId} 
+                    anime={item.anime as any} 
+                    index={idx}
+                    batchReady={batchReady}
+                  />
+                ))}
               </div>
-            )}
-          </>
-        ) : (
-          <div className="text-center py-20 bg-[#151F2E] rounded-2xl border border-gray-800 border-dashed">
-            {localAvatar ? (
-              <img src={localAvatar} alt="Profile" className="w-16 h-16 rounded-full object-cover mx-auto mb-4 border-2 border-gray-800" />
-            ) : (
-              <div className="bg-gray-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <User size={24} className="text-gray-400" />
-              </div>
-            )}
-            <h3 className="text-lg font-bold text-[#FBF3E5] mb-2">No anime found</h3>
-            <p className="text-gray-400">Add anime to your "{TABS.find(t => t.value === activeTab)?.label}" list to see them here.</p>
-          </div>
-        )}
+              {totalPages > 1 && (
+                <div className="flex justify-center items-center gap-4 mt-12">
+                  <button
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    className="px-4 py-2 bg-[#151F2E] text-white rounded-lg disabled:opacity-50 hover:bg-gray-800 active:scale-95 transition-all font-bold text-sm"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-gray-400 font-medium">Page {page} of {totalPages}</span>
+                  <button
+                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                    disabled={page === totalPages}
+                    className="px-4 py-2 bg-[#151F2E] text-white rounded-lg disabled:opacity-50 hover:bg-gray-800 active:scale-95 transition-all font-bold text-sm"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </motion.div>
+          ) : (
+            <motion.div
+              key={`empty-${activeTab}`}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              className="text-center py-20 bg-[#151F2E] rounded-2xl border border-gray-800 border-dashed"
+            >
+              {localAvatar ? (
+                <img src={localAvatar} alt="Profile" className="w-16 h-16 rounded-full object-cover mx-auto mb-4 border-2 border-gray-800" />
+              ) : (
+                <div className="bg-gray-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <User size={24} className="text-gray-400" />
+                </div>
+              )}
+              <h3 className="text-lg font-bold text-[#FBF3E5] mb-2">No anime found</h3>
+              <p className="text-gray-400">Add anime to your "{TABS.find(t => t.value === activeTab)?.label}" list to see them here.</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

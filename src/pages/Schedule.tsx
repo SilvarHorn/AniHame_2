@@ -30,6 +30,8 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
+import { useAuth, getPreferredAnimeTitle } from '../contexts/AuthContext';
+import { appLog } from '../lib/logger';
 
 function getRelativeDayLabel(date: Date) {
   if (isYesterday(date)) return 'YESTERDAY';
@@ -78,6 +80,8 @@ function formatCountdownOrAired(airingAtSeconds: number): { text: string; hasAir
 }
 
 export default function Schedule() {
+  const { profile } = useAuth();
+  const titleLanguage = profile?.preferences?.titleLanguage || 'english';
   const [scheduleByDay, setScheduleByDay] = useState<Record<string, AiringSchedule[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -187,7 +191,7 @@ export default function Schedule() {
         
         setScheduleByDay(prev => ({ ...prev, [dayKey]: allDaySchedules }));
       } catch (err) {
-        console.error('Error fetching schedule:', err);
+        appLog.error('schedule', err);
         setError('Failed to fetch schedule for this day. Please try again.');
       } finally {
         setLoading(false);
@@ -566,10 +570,9 @@ export default function Schedule() {
               {filteredItems.map(item => {
                 const airDate = fromUnixTime(item.airingAt);
                 const { text: statusText, hasAired } = formatCountdownOrAired(item.airingAt);
-                const title = isHanimeMode() 
-                  ? (item.media.title?.romaji || item.media.title?.english || 'Untitled') 
-                  : (item.media.title?.english || item.media.title?.romaji || 'Untitled');
-                const secondaryTitle = isHanimeMode() ? item.media.title?.english : item.media.title?.romaji;
+                const useRomajiPrimary = isHanimeMode() || titleLanguage === 'romaji';
+                const title = getPreferredAnimeTitle(item.media.title, titleLanguage, isHanimeMode());
+                const secondaryTitle = useRomajiPrimary ? item.media.title?.english : item.media.title?.romaji;
                 
                 // Clicking an episode that has already aired directly launches player!
                 const primaryLink = hasAired 

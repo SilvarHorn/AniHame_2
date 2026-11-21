@@ -8,9 +8,12 @@ import { cn } from '../lib/utils';
 import { MarqueeText } from '../components/MarqueeText';
 import { AnimeInfo } from '../components/ui/AnimeInfo';
 import { getAnimeListStatus, addOrUpdateToList, removeFromList, MyListStatus } from '../utils/myList';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, getPreferredAnimeTitle, getPreferredEpisodeTitle } from '../contexts/AuthContext';
 import AnimeCard from '../components/ui/AnimeCard';
 import { preloadAnimeThumbnails } from '../utils/imagePreload';
+import { jikanClient, JikanEpisodeThumb } from '../api/jikan';
+import { malClient, MalScrapedEpisode } from '../api/mal';
+import { appLog } from '../lib/logger';
 
 function RangeGridSelect({ value, onChange, options }: { value: string, onChange: (v: string)=>void, options: string[] }) {
   const [isOpen, setIsOpen] = React.useState(false);
@@ -99,22 +102,33 @@ export default function AnimeDetails() {
   const [imdbId, setImdbId] = useState<string | null>(null);
   const [showEpisodes, setShowEpisodes] = useState(false);
   const [malId, setMalId] = useState<number | null>(null);
-  const [kitsuEpisodes, setKitsuEpisodes] = useState<any[]>([]);
-  const [malEpisodes, setMalEpisodes] = useState<any[]>([]);
+  const [malEpisodes, setMalEpisodes] = useState<MalScrapedEpisode[]>([]);
+  const [episodeThumbs, setEpisodeThumbs] = useState<JikanEpisodeThumb[]>([]);
   const [episodeRange, setEpisodeRange] = useState('');
   const [fillerEpisodes, setFillerEpisodes] = useState<number[]>([]);
   const [watchedEpisodes, setWatchedEpisodes] = useState<number[]>([]);
   const [malTitle, setMalTitle] = useState<string | null>(null);
-  const [kitsuId, setKitsuId] = useState<string | null>(null);
   const [malScore, setMalScore] = useState<number | null>(null);
   const [kitsuScore, setKitsuScore] = useState<number | null>(null);
   const [ageRating, setAgeRating] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!id) return;
+    let isCancelled = false;
+
+    setLoading(true);
+    setShowEpisodes(false);
+    setMalEpisodes([]);
+    setEpisodeThumbs([]);
+    setMalId(null);
+    setImdbId(null);
+    setMalTitle(null);
+
     const loadDetails = async () => {
       setError('');
       try {
         const data = await fetchAnilist(ANIME_DETAILS_QUERY, { id: Number(id) });
+        if (isCancelled) return;
         
         const watchedKey = `watched_eps_${id}`;
         setWatchedEpisodes(JSON.parse(localStorage.getItem(watchedKey) || '[]'));
@@ -131,12 +145,14 @@ export default function AnimeDetails() {
           if (data.Media.nextAiringEpisode) {
             epCount = data.Media.nextAiringEpisode.episode - 1;
           }
-          let priorityRange = undefined;
           if (epCount > 100) {
             setEpisodeRange('1 - 100');
-            priorityRange = { start: 1, end: 100 };
           } else {
             setEpisodeRange('');
+          }
+
+          if (data.Media.idMal) {
+            setMalId(data.Media.idMal);
           }
           
           const aTitle = data.Media.title.english || data.Media.title.romaji;
@@ -145,28 +161,28 @@ export default function AnimeDetails() {
             fetch(`/api/filler/${formattedName}`)
               .then(res => res.json())
               .then(d => {
-                if (d.fillerEpisodes) setFillerEpisodes(d.fillerEpisodes);
+                if (!isCancelled && d.fillerEpisodes) setFillerEpisodes(d.fillerEpisodes);
               })
-              .catch(console.error);
+              .catch(() => {});
           }
 
           fetch(`/api/mapping/${id}`)
-            .then(res => res.json())
+            .then(res => (res.ok ? res.json() : null))
             .then(async mapping => {
-              let iId = null;
+              if (isCancelled) return;
               if (mapping && mapping.imdb_id && mapping.imdb_id.length > 0) {
-                iId = Array.isArray(mapping.imdb_id) ? mapping.imdb_id[0] : mapping.imdb_id;
+                const iId = Array.isArray(mapping.imdb_id) ? mapping.imdb_id[0] : mapping.imdb_id;
                 setImdbId(iId);
               }
               
-              const malId = data.Media.idMal || (mapping?.mal_id ? Number(mapping.mal_id) : null);
-              if (malId) {
-                setMalId(malId);
-                // 1. Fetch metadata (score, age rating, type) via server proxy with 12h cache
-                fetch(`/api/mal/anime/${malId}`)
+              const resolvedMalId = data.Media.idMal || (mapping?.mal_id ? Number(mapping.mal_id) : null);
+              if (resolvedMalId) {
+                setMalId(resolvedMalId);
+                // Fetch metadata (score, age rating, type) via server proxy with 12h cache
+                fetch(`/api/mal/anime/${resolvedMalId}`)
                   .then(res => res.ok ? res.json() : null)
                   .then(meta => {
-                    if (meta) {
+                    if (!isCancelled && meta) {
                       if (meta.score) setMalScore(meta.score);
                       if (meta.kitsuScore) setKitsuScore(meta.kitsuScore);
                       if (meta.rating) setAgeRating(meta.rating);
@@ -177,85 +193,72 @@ export default function AnimeDetails() {
                     }
                   })
                   .catch(() => {});
-
-                // 2. Fetch episode release dates from Jikan API
-                import('../api/jikan').then(({ jikanClient }) => {
-                  jikanClient.getEpisodes(
-                    malId,
-                    priorityRange,
-                    (newEps) => setMalEpisodes([...newEps])
-                  ).catch(() => {});
-                }).catch(() => {});
-
-                // 3. Fetch episode thumbnails and titles from Kitsu
-                try {
-                  const { kitsuClient } = await import('../api/kitsu');
-                  const resolvedKitsuId = await kitsuClient.getKitsuIdByMalId(malId);
-                  if (resolvedKitsuId) {
-                    setKitsuId(resolvedKitsuId);
-                    const epData = await kitsuClient.getEpisodes(
-                      resolvedKitsuId,
-                      priorityRange,
-                      (newEps) => setKitsuEpisodes([...newEps])
-                    );
-                    if (epData && epData.length > 0) {
-                      setKitsuEpisodes([...epData]);
-                    }
-                  }
-                } catch (e) {
-                  console.error('Episode fetch error', e);
-                }
               }
             })
-            .catch(err => console.error("Failed to fetch mapping", err));
+            .catch(() => {});
         } else {
-
           setError('Anime not found.');
         }
       } catch (err) {
-        console.error('Error fetching details:', err);
-        setError('Failed to fetch anime details.');
+        if (!isCancelled) {
+          appLog.error('details', err);
+          setError('Failed to fetch anime details.');
+        }
       } finally {
-        setLoading(false);
+        if (!isCancelled) {
+          setLoading(false);
+        }
       }
     };
 
-    if (id) {
-      setLoading(true);
-      setShowEpisodes(false);
-      loadDetails();
-    }
+    loadDetails();
+    return () => {
+      isCancelled = true;
+    };
   }, [id]);
 
+  // Fetch episode titles + DD/MM/YYYY air dates ONLY from MAL episode page scraper,
+  // and episode thumbnails ONLY from Jikan /videos/episodes
   useEffect(() => {
+    if (!malId || !anime) return;
+    let isCancelled = false;
+
+    const totalEps = anime.nextAiringEpisode
+      ? anime.nextAiringEpisode.episode - 1
+      : (anime.episodes || 12);
+
+    let start = 1;
+    let end = Math.min(totalEps, 100);
     if (episodeRange && episodeRange.includes(' - ')) {
-      const [start, end] = episodeRange.split(' - ').map(Number);
-      if (!isNaN(start) && !isNaN(end)) {
-        if (malId) {
-          import('../api/jikan').then(({ jikanClient }) => {
-            jikanClient.getEpisodes(malId, { start, end }, (newEps) => {
-              setMalEpisodes(prev => {
-                const map = new Map(prev.map((e: any) => [e.num, e]));
-                newEps.forEach((e: any) => map.set(e.num, e));
-                return Array.from(map.values()).sort((a: any, b: any) => a.num - b.num);
-              });
-            }).catch(() => {});
-          });
-        }
-        if (kitsuId) {
-          import('../api/kitsu').then(({ kitsuClient }) => {
-            kitsuClient.getEpisodes(kitsuId, { start, end }, (newEps) => {
-              setKitsuEpisodes(prev => {
-                const map = new Map(prev.map((e: any) => [e.num, e]));
-                newEps.forEach((e: any) => map.set(e.num, e));
-                return Array.from(map.values()).sort((a: any, b: any) => a.num - b.num);
-              });
-            });
-          });
-        }
+      const [s, e] = episodeRange.split(' - ').map(Number);
+      if (!isNaN(s) && !isNaN(e)) {
+        start = s;
+        end = e;
       }
     }
-  }, [malId, kitsuId, episodeRange]);
+
+    const romajiTitle = anime.title.romaji || anime.title.english || '';
+
+    malClient
+      .getEpisodesForRange(malId, romajiTitle, { start, end }, (eps) => {
+        if (!isCancelled) {
+          setMalEpisodes(eps);
+        }
+      })
+      .catch(() => {});
+
+    jikanClient
+      .getThumbnailsForRange(malId, { start, end }, (thumbs) => {
+        if (!isCancelled) {
+          setEpisodeThumbs(thumbs);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [malId, episodeRange, anime?.title?.romaji, anime?.episodes, anime?.nextAiringEpisode?.episode]);
 
   useEffect(() => {
     if (!loading && anime) {
@@ -332,7 +335,8 @@ export default function AnimeDetails() {
 
   if (!anime) return null;
 
-  const title = malTitle || (isHanimeMode() ? (anime.title.romaji || anime.title.english) : (anime.title.english || anime.title.romaji));
+  const titleLanguage = profile?.preferences?.titleLanguage || 'english';
+  const title = malTitle || getPreferredAnimeTitle(anime.title, titleLanguage, isHanimeMode());
   
   // Create episode boxes
   let episodeCount = anime.episodes || 12; // Fallback
@@ -344,47 +348,26 @@ export default function AnimeDetails() {
   const episodeThumbMap = new Map<number, string>();
   const episodeAiredMap = new Map<number, string>();
   
-  // 1. Fallback 2: AniList streaming episodes
-  if (anime?.streamingEpisodes) {
-    anime.streamingEpisodes.forEach(ep => {
-      const match = ep.title.match(/Episode\s+(\d+)(?:\s*[-:]\s*(.*))?/i);
-      if (match) {
-        const epNum = parseInt(match[1]);
-        const aniListTitle = match[2]?.trim();
-        if (aniListTitle && !aniListTitle.match(/^Episode\s+\d+$/i)) {
-          episodeTitleMap.set(epNum, aniListTitle);
-        } else if (ep.title && !ep.title.match(/^Episode\s+\d+$/i)) {
-          episodeTitleMap.set(epNum, ep.title);
-        }
-        if (ep.thumbnail) {
-          episodeThumbMap.set(epNum, ep.thumbnail);
-        }
-      }
-    });
-  }
-
-  // 2. Fallback 1: Kitsu episodes (overrides AniList)
-  if (kitsuEpisodes && kitsuEpisodes.length > 0) {
-    kitsuEpisodes.forEach((ep: any) => {
-      if (ep.num) {
-        if (ep.title && !ep.title.match(/^Episode\s+\d+$/i)) {
-          episodeTitleMap.set(ep.num, ep.title);
-        }
-        if (ep.thumbnail) {
-          episodeThumbMap.set(ep.num, ep.thumbnail);
-        }
-      }
-    });
-  }
-
-  // 3. Primary: MAL episodes (overrides Kitsu and AniList)
+  // Episode titles & DD/MM/YYYY air dates exclusively from MAL episode page scraper
   if (malEpisodes && malEpisodes.length > 0) {
-    malEpisodes.forEach((ep: any) => {
-      if (ep.num && ep.title && !ep.title.match(/^Episode\s+\d+$/i)) {
-        episodeTitleMap.set(ep.num, ep.title);
+    malEpisodes.forEach((ep) => {
+      if (ep.num) {
+        const resolved = getPreferredEpisodeTitle(ep, ep.num, titleLanguage);
+        if (resolved && !resolved.match(/^Episode\s+\d+$/i)) {
+          episodeTitleMap.set(ep.num, resolved);
+        }
+        if (ep.aired) {
+          episodeAiredMap.set(ep.num, ep.aired);
+        }
       }
-      if (ep.num && ep.aired) {
-        episodeAiredMap.set(ep.num, ep.aired);
+    });
+  }
+
+  // Episode thumbnails exclusively from Jikan /videos/episodes
+  if (episodeThumbs && episodeThumbs.length > 0) {
+    episodeThumbs.forEach((ep) => {
+      if (ep.num && ep.thumbnail) {
+        episodeThumbMap.set(ep.num, ep.thumbnail);
       }
     });
   }
@@ -412,32 +395,45 @@ export default function AnimeDetails() {
   return (
     <div>
       {/* Banner Area */}
-      <div className="relative w-full h-[40vh] min-h-[300px] overflow-hidden">
-        <img 
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+        className="relative w-full h-[40vh] min-h-[300px] overflow-hidden"
+      >
+        <motion.img 
+          initial={{ scale: 1.06 }}
+          animate={{ scale: 1 }}
+          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
           src={anime.bannerImage || anime.coverImage.extraLarge} 
           alt={title}
           fetchPriority="high"
           className="absolute inset-0 w-full h-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#0B0C0F] via-[#0B0C0F]/80 to-transparent" />
-      </div>
+      </motion.div>
 
       <div className="w-full px-4 sm:px-6 lg:px-8 -mt-32 relative z-10 pb-12">
         <div className="flex flex-col md:flex-row gap-8">
           {/* Left Column - Cover & Actions */}
-          <div className="w-48 md:w-64 flex-shrink-0 mx-auto md:mx-0">
-            <div className="rounded-xl overflow-hidden shadow-2xl shadow-black/50 border border-white/5 bg-gray-800 aspect-[3/4] mb-6">
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            className="w-48 md:w-64 flex-shrink-0 mx-auto md:mx-0"
+          >
+            <div className="rounded-xl overflow-hidden shadow-2xl shadow-black/50 border border-white/5 bg-gray-800 aspect-[3/4] mb-6 group">
               <img 
                 src={anime.coverImage.extraLarge} 
                 alt={title}
                 fetchPriority="high"
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]"
               />
             </div>
             
             <Link 
               to={`/watch/${anime.id}/1`}
-              className="w-full bg-primary hover:bg-primary-hover text-[#0B0C0F] font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-lg mb-3"
+              className="w-full bg-primary hover:bg-primary-hover text-[#0B0C0F] font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 hover:-translate-y-0.5 active:scale-95 shadow-lg mb-3"
             >
               <Play size={20} fill="currentColor" />
               Watch Episode 1
@@ -466,7 +462,7 @@ export default function AnimeDetails() {
                 href={`https://anilist.co/anime/${anime.id}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full bg-[#02A9FF]/10 hover:bg-[#02A9FF]/20 text-[#02A9FF] border border-[#02A9FF]/30 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors text-sm"
+                className="w-full bg-[#02A9FF]/10 hover:bg-[#02A9FF]/20 text-[#02A9FF] border border-[#02A9FF]/30 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 hover:-translate-y-0.5 active:scale-95 text-sm"
               >
                 <ExternalLink size={16} />
                 AniList
@@ -476,7 +472,7 @@ export default function AnimeDetails() {
                   href={`https://myanimelist.net/anime/${anime.idMal}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full bg-[#2E51A2]/10 hover:bg-[#2E51A2]/20 text-[#5383E8] border border-[#2E51A2]/30 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors text-sm"
+                  className="w-full bg-[#2E51A2]/10 hover:bg-[#2E51A2]/20 text-[#5383E8] border border-[#2E51A2]/30 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 hover:-translate-y-0.5 active:scale-95 text-sm"
                 >
                   <ExternalLink size={16} />
                   MyAnimeList
@@ -487,17 +483,22 @@ export default function AnimeDetails() {
                   href={`https://www.imdb.com/title/${imdbId}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full bg-[#F5C518]/10 hover:bg-[#F5C518]/20 text-[#F5C518] border border-[#F5C518]/30 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors text-sm"
+                  className="w-full bg-[#F5C518]/10 hover:bg-[#F5C518]/20 text-[#F5C518] border border-[#F5C518]/30 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 hover:-translate-y-0.5 active:scale-95 text-sm"
                 >
                   <ExternalLink size={16} />
                   IMDb
                 </a>
               )}
             </div>
-          </div>
+          </motion.div>
 
           {/* Right Column - Details */}
-          <div className="flex-grow pt-8 md:pt-32">
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.42, delay: 0.06, ease: [0.16, 1, 0.3, 1] }}
+            className="flex-grow pt-8 md:pt-32"
+          >
             <h1 className="text-3xl md:text-5xl font-bold text-[#FBF3E5] mb-4">
               {title}
             </h1>
@@ -531,14 +532,14 @@ export default function AnimeDetails() {
                   )}
                   <button 
                     onClick={() => setIsListView(!isListView)}
-                    className="p-2 text-gray-400 hover:text-primary transition-colors bg-white/[0.06] hover:bg-white/[0.12] rounded-lg border border-white/10 h-[38px] w-[38px] flex items-center justify-center"
+                    className="p-2 text-gray-400 hover:text-primary transition-all duration-200 active:scale-90 bg-white/[0.06] hover:bg-white/[0.12] rounded-lg border border-white/10 h-[38px] w-[38px] flex items-center justify-center"
                     title="Toggle View Mode"
                   >
                     {isListView ? <LayoutGrid size={18} /> : <ListIcon size={18} />}
                   </button>
                   <button 
                     onClick={() => setSortDesc(!sortDesc)}
-                    className="p-2 text-gray-400 hover:text-primary transition-colors bg-white/[0.06] hover:bg-white/[0.12] rounded-lg border border-white/10 h-[38px] w-[38px] flex items-center justify-center"
+                    className="p-2 text-gray-400 hover:text-primary transition-all duration-200 active:scale-90 bg-white/[0.06] hover:bg-white/[0.12] rounded-lg border border-white/10 h-[38px] w-[38px] flex items-center justify-center"
                     title="Sort Order"
                   >
                     <ArrowDownUp size={18} />
@@ -549,9 +550,11 @@ export default function AnimeDetails() {
               <AnimatePresence mode="wait">
                 {showEpisodes ? (
                   <motion.div 
-                    initial={{ opacity: 0, y: 20 }}
+                    key={`${isListView ? 'list' : 'grid'}-${episodeRange}-${sortDesc ? 'desc' : 'asc'}`}
+                    initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, ease: "easeOut" }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
                     className={cn(
                       "gap-3",
                       isListView 
@@ -562,6 +565,8 @@ export default function AnimeDetails() {
                     {episodes.map(ep => {
                       const isFiller = fillerEpisodes.includes(ep);
                       const isWatched = watchedEpisodes.includes(ep);
+                      const fallbackThumb = anime.bannerImage || anime.coverImage.extraLarge || anime.coverImage.large;
+                      const thumbSrc = episodeThumbMap.get(ep) || fallbackThumb;
                       return isListView ? (
                         <Link
                           key={ep}
@@ -574,7 +579,14 @@ export default function AnimeDetails() {
                         >
                           <div className="w-32 aspect-video flex-shrink-0 relative rounded-lg overflow-hidden bg-gray-900">
                             <img 
-                              src={episodeThumbMap.get(ep) || anime.bannerImage || anime.coverImage.extraLarge || anime.coverImage.large} 
+                              src={thumbSrc} 
+                              referrerPolicy="no-referrer"
+                              loading="lazy"
+                              onError={(e) => {
+                                if (fallbackThumb && e.currentTarget.src !== fallbackThumb) {
+                                  e.currentTarget.src = fallbackThumb;
+                                }
+                              }}
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
                               alt={`Episode ${ep}`} 
                             />
@@ -610,8 +622,15 @@ export default function AnimeDetails() {
                         >
                           <div className="absolute inset-0 w-full h-full">
                             <img 
-                              src={episodeThumbMap.get(ep) || anime.bannerImage || anime.coverImage.extraLarge || anime.coverImage.large} 
+                              src={thumbSrc} 
                               alt={`Episode ${ep}`} 
+                              referrerPolicy="no-referrer"
+                              loading="lazy"
+                              onError={(e) => {
+                                if (fallbackThumb && e.currentTarget.src !== fallbackThumb) {
+                                  e.currentTarget.src = fallbackThumb;
+                                }
+                              }}
                               className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 opacity-60 group-hover:opacity-30" 
                             />
                             <div className={cn("absolute inset-0 opacity-80", isFiller ? "bg-gradient-to-t from-[#f97316]/40 via-[#0B0C0F]/60 to-[#f97316]/10 mix-blend-color" : "bg-gradient-to-t from-[#0B0C0F] via-[#0B0C0F]/40 to-transparent")} />
@@ -665,7 +684,7 @@ export default function AnimeDetails() {
                 </div>
               </div>
             )}
-          </div>
+          </motion.div>
         </div>
       </div>
     </div>

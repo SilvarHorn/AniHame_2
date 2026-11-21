@@ -67,10 +67,15 @@ function PageWrapper({ children }: { children: React.ReactNode }) {
 
 function AnimatedRoutes() {
   const location = useLocation();
+  // Keep Watch mounted across episode changes for the same series (/watch/:id/:ep -> /watch/:id)
+  const routeKey = location.pathname.startsWith('/watch/')
+    ? location.pathname.split('/').slice(0, 3).join('/')
+    : location.pathname;
+
   return (
     <AnimatePresence mode="wait">
       {/* @ts-ignore: key is an intrinsic React prop */}
-      <Routes location={location} key={location.pathname}>
+      <Routes location={location} key={routeKey}>
         <Route path="/" element={<Suspense fallback={<PageLoader />}><PageWrapper><Home /></PageWrapper></Suspense>} />
         <Route path="/explore" element={<Suspense fallback={<PageLoader />}><PageWrapper><Explore /></PageWrapper></Suspense>} />
         <Route path="/trending" element={<Suspense fallback={<PageLoader />}><PageWrapper><Trending /></PageWrapper></Suspense>} />

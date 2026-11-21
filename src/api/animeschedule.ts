@@ -16,8 +16,8 @@ export async function fetchLatestUpdated(page = 1, perPage = 24) {
         return json;
       }
     }
-  } catch (serverErr) {
-    console.warn("Server latest route unavailable, falling back to direct fetch", serverErr);
+  } catch {
+    // Fall back silently to direct fetch
   }
 
   // 2. Direct client fetch fallback
@@ -94,8 +94,7 @@ export async function fetchLatestUpdated(page = 1, perPage = 24) {
         hasNextPage
       }
     };
-  } catch (error) {
-    console.warn("AniSchedule fallback to Trending query:", error);
+  } catch {
     // 3. Guaranteed graceful fallback: fetch trending so UI never breaks
     try {
       const fallbackData = await fetchAnilist(TRENDING_ANIME_QUERY, { page, perPage });

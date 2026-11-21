@@ -2,9 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { Dices, RefreshCw } from 'lucide-react';
-import { getRandomAnimeWithReroll } from '../api/anilist';
+import { getRandomAnimeWithReroll, isHanimeMode } from '../api/anilist';
+import { useAuth, getPreferredAnimeTitle } from '../contexts/AuthContext';
+import { appLog } from '../lib/logger';
 
 export default function Random() {
+  const { profile } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [statusText, setStatusText] = useState('Finding a random anime...');
@@ -21,14 +24,15 @@ export default function Random() {
       const anime = await getRandomAnimeWithReroll(12);
 
       if (anime && anime.id) {
-        setStatusText(`Found: ${anime.title.english || anime.title.romaji || 'Anime'}! Redirecting...`);
+        const displayName = getPreferredAnimeTitle(anime.title, profile?.preferences?.titleLanguage || 'english', isHanimeMode());
+        setStatusText(`Found: ${displayName}! Redirecting...`);
         // Navigate directly to the confirmed existing anime details page
         navigate(`/anime/${anime.id}`, { replace: true });
       } else {
         throw new Error('Retrieved anime was invalid. Rerolling...');
       }
     } catch (err: any) {
-      console.error('Error in Random page:', err);
+      appLog.error('random', err);
       setError('Could not locate a valid anime. Please try rolling again.');
       setIsRolling(false);
     }

@@ -35,7 +35,7 @@ export function MarqueeText({ text, className, align = 'center', hoverOnly = fal
     const checkOverflow = () => {
       if (containerRef.current && textRef.current) {
         const containerWidth = containerRef.current.clientWidth;
-        const textWidth = textRef.current.getBoundingClientRect().width;
+        const textWidth = textRef.current.scrollWidth;
         setIsOverflowing(textWidth > containerWidth);
       }
     };

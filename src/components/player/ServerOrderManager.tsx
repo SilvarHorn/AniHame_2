@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'motion/react';
 import { WatchServerType, DEFAULT_SERVER_ORDER } from '../../contexts/AuthContext';
 import { ChevronUp, ChevronDown, RotateCcw, GripVertical } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -167,69 +168,74 @@ export const ServerOrderManager: React.FC<ServerOrderManagerProps> = ({
           const isTargeted = dragOverIndex === idx && draggedIndex !== idx;
 
           return (
-            <div
+            <motion.div
               key={srvKey}
-              draggable={true}
-              onDragStart={(e) => handleDragStart(e, idx)}
-              onDragOver={(e) => handleDragOver(e, idx)}
-              onDragLeave={(e) => handleDragLeave(e, idx)}
-              onDrop={(e) => handleDrop(e, idx)}
-              onDragEnd={handleDragEnd}
-              className={cn(
-                "group flex items-center justify-between px-3 py-2.5 rounded-lg border border-white/5 bg-[#12141A] transition-all cursor-grab active:cursor-grabbing select-none",
-                idx === 0 && !isTargeted && !isBeingDragged && "border-primary/30 bg-primary/5",
-                isBeingDragged && "opacity-35 scale-[0.98] border-dashed border-primary/50 shadow-inner",
-                isTargeted && "border-primary bg-primary/15 ring-2 ring-primary/40 -translate-y-0.5 shadow-lg shadow-primary/10"
-              )}
+              layout="position"
+              transition={{ type: 'spring', stiffness: 450, damping: 34 }}
             >
-              <div className="flex items-center gap-3 min-w-0">
-                {/* Drag Handle */}
-                <div 
-                  className="text-gray-500 group-hover:text-primary transition-colors cursor-grab active:cursor-grabbing shrink-0"
-                  title="Drag to rearrange"
-                >
-                  <GripVertical size={16} />
-                </div>
-
-                <span className={cn(
-                  "w-5 h-5 rounded flex items-center justify-center text-[11px] font-black shrink-0",
-                  idx === 0 ? "bg-primary text-[#0B0C0F]" : "bg-gray-800 text-gray-400"
-                )}>
-                  {idx + 1}
-                </span>
-
-                <div className="flex items-center min-w-0">
-                  <span className="text-sm font-bold text-[#FBF3E5] truncate">
-                    {meta.name}
-                  </span>
-                </div>
-              </div>
-
-              <div 
-                className="flex items-center gap-1 shrink-0 ml-2"
-                onClick={(e) => e.stopPropagation()}
-                onMouseDown={(e) => e.stopPropagation()}
+              <div
+                draggable={true}
+                onDragStart={(e) => handleDragStart(e, idx)}
+                onDragOver={(e) => handleDragOver(e, idx)}
+                onDragLeave={(e) => handleDragLeave(e, idx)}
+                onDrop={(e) => handleDrop(e, idx)}
+                onDragEnd={handleDragEnd}
+                className={cn(
+                  "group flex items-center justify-between px-3 py-2.5 rounded-lg border border-white/5 bg-[#12141A] transition-all duration-200 cursor-grab active:cursor-grabbing select-none",
+                  idx === 0 && !isTargeted && !isBeingDragged && "border-primary/30 bg-primary/5",
+                  isBeingDragged && "opacity-35 scale-[0.98] border-dashed border-primary/50 shadow-inner",
+                  isTargeted && "border-primary bg-primary/15 ring-2 ring-primary/40 -translate-y-0.5 shadow-lg shadow-primary/10"
+                )}
               >
-                <button
-                  type="button"
-                  onClick={() => moveUp(idx)}
-                  disabled={idx === 0}
-                  className="p-1.5 rounded hover:bg-gray-800 text-gray-400 hover:text-white disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-gray-400 transition-colors"
-                  title="Move Up"
+                <div className="flex items-center gap-3 min-w-0">
+                  {/* Drag Handle */}
+                  <div 
+                    className="text-gray-500 group-hover:text-primary transition-colors cursor-grab active:cursor-grabbing shrink-0"
+                    title="Drag to rearrange"
+                  >
+                    <GripVertical size={16} />
+                  </div>
+
+                  <span className={cn(
+                    "w-5 h-5 rounded flex items-center justify-center text-[11px] font-black shrink-0 transition-colors duration-200",
+                    idx === 0 ? "bg-primary text-[#0B0C0F]" : "bg-gray-800 text-gray-400"
+                  )}>
+                    {idx + 1}
+                  </span>
+
+                  <div className="flex items-center min-w-0">
+                    <span className="text-sm font-bold text-[#FBF3E5] truncate">
+                      {meta.name}
+                    </span>
+                  </div>
+                </div>
+
+                <div 
+                  className="flex items-center gap-1 shrink-0 ml-2"
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
                 >
-                  <ChevronUp size={16} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => moveDown(idx)}
-                  disabled={idx === sanitizedOrder.length - 1}
-                  className="p-1.5 rounded hover:bg-gray-800 text-gray-400 hover:text-white disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-gray-400 transition-colors"
-                  title="Move Down"
-                >
-                  <ChevronDown size={16} />
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => moveUp(idx)}
+                    disabled={idx === 0}
+                    className="p-1.5 rounded hover:bg-gray-800 text-gray-400 hover:text-white disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-gray-400 transition-all active:scale-90"
+                    title="Move Up"
+                  >
+                    <ChevronUp size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveDown(idx)}
+                    disabled={idx === sanitizedOrder.length - 1}
+                    className="p-1.5 rounded hover:bg-gray-800 text-gray-400 hover:text-white disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-gray-400 transition-all active:scale-90"
+                    title="Move Down"
+                  >
+                    <ChevronDown size={16} />
+                  </button>
+                </div>
               </div>
-            </div>
+            </motion.div>
           );
         })}
       </div>
@@ -243,15 +249,17 @@ export const ServerOrderManager: React.FC<ServerOrderManagerProps> = ({
           {sanitizedOrder.map((srvKey, idx) => {
             const meta = SERVER_METAS[srvKey];
             return (
-              <span
+              <motion.span
                 key={srvKey}
+                layout="position"
+                transition={{ type: 'spring', stiffness: 450, damping: 34 }}
                 className={cn(
-                  "px-2.5 py-1 rounded text-xs font-bold whitespace-nowrap",
+                  "px-2.5 py-1 rounded text-xs font-bold whitespace-nowrap transition-colors duration-200",
                   idx === 0 ? "bg-primary text-[#0B0C0F]" : "bg-gray-800 text-gray-300"
                 )}
               >
                 {meta?.name || srvKey}
-              </span>
+              </motion.span>
             );
           })}
         </div>

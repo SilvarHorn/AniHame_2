@@ -10,7 +10,11 @@
   --theme-color-hover: #e8dfcf;
 }
 
-/* Global visible scrollbars */
+/* Global smooth scrolling & visible scrollbars */
+html {
+  scroll-behavior: smooth;
+}
+
 html, body {
   scrollbar-width: thin !important;
   scrollbar-color: #4b5563 #0e131d !important;
@@ -19,6 +23,29 @@ html, body {
 * {
   scrollbar-width: thin;
   scrollbar-color: #4b5563 #0e131d;
+}
+
+@layer base {
+  a,
+  button,
+  input,
+  select,
+  textarea {
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 ::-webkit-scrollbar {

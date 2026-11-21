@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { Star, Play, Film } from 'lucide-react';
 import { AnimeMedia } from '../../types';
 import { MarqueeText } from '../MarqueeText';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth, getPreferredAnimeTitle } from '../../contexts/AuthContext';
 
 interface AnimeCardProps {
   key?: React.Key;
@@ -51,7 +51,8 @@ function AnimeCardComponent({
   const cardBorder = profile?.preferences?.cardBorder;
   const isCustomBorder = cardBorder?.mode === 'custom' && Boolean(cardBorder?.color);
 
-  const title = isHanimeMode() ? (anime.title?.romaji || anime.title?.english || 'Unknown') : (anime.title?.english || anime.title?.romaji || 'Unknown');
+  const titleLanguage = profile?.preferences?.titleLanguage || 'english';
+  const title = getPreferredAnimeTitle(anime.title, titleLanguage, isHanimeMode());
   const formatStr = anime.format ? anime.format.replace('_', ' ') : 'TV';
   const epStr = progressEpisode 
     ? `Ep ${progressEpisode}` 

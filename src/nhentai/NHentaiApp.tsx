@@ -142,8 +142,8 @@ function NHentaiHome() {
         const thumbs = top5.map((g: any) => g.thumbnail ? (g.thumbnail.startsWith('http') ? g.thumbnail : `https://t3.nhentai.net/${g.thumbnail}`) : `https://t3.nhentai.net/galleries/${g.media_id}/thumb.jpg`);
         await preloadAnimeThumbnails(thumbs);
         setPopularGalleries(top5);
-      } catch (e) {
-        console.error("Error fetching popular:", e);
+      } catch {
+        // Ignore transient popular fetch error
       }
       setLoadingPopular(false);
     };
@@ -186,8 +186,8 @@ function NHentaiHome() {
         await preloadAnimeThumbnails(thumbs);
         
         setGalleries(sliced);
-      } catch (e) {
-        console.error(e);
+      } catch {
+        // Ignore transient gallery list fetch error
       }
       setLoading(false);
     };

@@ -6,7 +6,9 @@ import Fade from 'embla-carousel-fade';
 import { AnimeMedia } from '../../types';
 import { Play, Info } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { motion } from 'motion/react';
 import { useMalScore } from '../../utils/malScore';
+import { useAuth, getPreferredAnimeTitle } from '../../contexts/AuthContext';
 
 function BannerScoreBadge({ anime }: { anime: AnimeMedia }) {
   const { formattedScore, isMal } = useMalScore(anime);
@@ -26,6 +28,8 @@ interface BannerProps {
 }
 
 export default React.memo(function Banner({ trending }: BannerProps) {
+  const { profile } = useAuth();
+  const titleLanguage = profile?.preferences?.titleLanguage || 'english';
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, align: 'start' }, [
     Autoplay({ delay: 5000, stopOnInteraction: false }),
     Fade()
@@ -62,15 +66,17 @@ export default React.memo(function Banner({ trending }: BannerProps) {
       >
         <div className="h-full" ref={emblaRef}>
           <div className="flex h-full">
-            {bannerAnime.map((anime, index) => (
+            {bannerAnime.map((anime, index) => {
+              const isActiveSlide = index === selectedIndex;
+              return (
               <div key={anime.id} className="relative flex-[0_0_100%] h-full bg-[#0B0C0F] overflow-hidden">
                 {/* Background Image (Covering the box with slight overflow) */}
                 <div className="absolute inset-0">
                   <img
                     src={anime.bannerImage || anime.coverImage.extraLarge}
-                    alt={isHanimeMode() ? (anime.title.romaji || anime.title.english) : (anime.title.english || anime.title.romaji)}
+                    alt={getPreferredAnimeTitle(anime.title, titleLanguage, isHanimeMode())}
                     fetchPriority="high"
-                    className="w-full h-full object-cover object-center scale-[1.15]"
+                    className={`w-full h-full object-cover object-center transition-transform duration-1000 ease-out ${isActiveSlide ? 'scale-[1.06]' : 'scale-[1.15]'}`}
                   />
                 </div>
 
@@ -80,7 +86,11 @@ export default React.memo(function Banner({ trending }: BannerProps) {
                 
                 {/* 4. Content */}
                 <div className="relative h-full flex flex-col justify-center px-6 md:px-12 gap-3 w-full md:w-2/3 lg:w-1/2">
-                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+                  <motion.div
+                    initial={false}
+                    animate={isActiveSlide ? { opacity: 1, y: 0 } : { opacity: 0, y: 14 }}
+                    transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                  >
                     <div className="flex items-center gap-2 mb-2">
                       <span className="bg-primary text-[#0B0C0F] text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">
                         TRENDING #{index + 1}
@@ -89,7 +99,7 @@ export default React.memo(function Banner({ trending }: BannerProps) {
                     </div>
                     
                     <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-2 line-clamp-2 leading-tight drop-shadow-lg">
-                      {isHanimeMode() ? (anime.title.romaji || anime.title.english) : (anime.title.english || anime.title.romaji)}
+                      {getPreferredAnimeTitle(anime.title, titleLanguage, isHanimeMode())}
                     </h1>
                     
                     <p className="text-gray-300 text-sm md:text-base mb-6 line-clamp-2 max-w-lg drop-shadow-md">
@@ -99,23 +109,24 @@ export default React.memo(function Banner({ trending }: BannerProps) {
                     <div className="flex items-center gap-3 mt-2">
                       <Link 
                         to={`/watch/${anime.id}/1`}
-                        className="bg-primary hover:bg-primary-hover text-[#0B0C0F] font-bold py-2.5 px-6 rounded-md flex items-center gap-2 transition-colors text-sm"
+                        className="bg-primary hover:bg-primary-hover text-[#0B0C0F] font-bold py-2.5 px-6 rounded-md flex items-center gap-2 transition-all duration-200 hover:-translate-y-0.5 active:scale-95 shadow-lg shadow-primary/20 text-sm"
                       >
                         <Play size={16} fill="currentColor" />
                         Watch Now
                       </Link>
                       <Link 
                         to={`/anime/${anime.id}`}
-                        className="bg-white/10 hover:bg-white/20 backdrop-blur-md text-white font-bold py-2.5 px-6 rounded-md flex items-center gap-2 transition-colors text-sm"
+                        className="bg-white/10 hover:bg-white/20 backdrop-blur-md text-white font-bold py-2.5 px-6 rounded-md flex items-center gap-2 transition-all duration-200 hover:-translate-y-0.5 active:scale-95 text-sm"
                       >
                         <Info size={16} />
                         Details
                       </Link>
                     </div>
-                  </div>
+                  </motion.div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
           
