@@ -11,10 +11,11 @@ const serverLogState = new Map<string, { lastAt: number; suppressed: number }>()
 
 function summarizeServerErr(err: any): string {
   if (!err) return 'unknown';
-  if (typeof err === 'string') return err;
+  const sanitize = (s: string) => s.replace(/([?&]api_key=)[^&\s]+/gi, '$1[REDACTED]');
+  if (typeof err === 'string') return sanitize(err);
   const status = err?.response?.status ? `HTTP ${err.response.status}` : '';
   const code = err?.code && typeof err.code === 'string' ? err.code : '';
-  const msg = err?.message ? String(err.message) : '';
+  const msg = err?.message ? sanitize(String(err.message)) : '';
   return [status, code, msg].filter(Boolean).join(' - ') || 'error';
 }
 
@@ -1554,6 +1555,639 @@ app.get("/api/mal/anime/:malId/videos", async (req, res) => {
     return res.json(result);
   } catch (err: any) {
     return res.json({ episodes: [], pagination: { last_visible_page: page, has_next_page: false } });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// TMDB ID Resolution (from AniList ID or MAL ID) & Season Page Scraper
+// Scrapes: https://www.themoviedb.org/tv/{tmdbId}/season/{seasonNumber}
+// Extracts: Episode thumbnail URL and runtime
+// -----------------------------------------------------------------------------
+interface ResolvedTmdbMapping {
+  tmdbId: number;
+  mediaType: 'tv' | 'movie';
+  season: number | null;
+  episodeOffset: number;
+  source: 'anime-lists' | 'arm' | 'anizip';
+}
+
+interface ScrapedTmdbEpisode {
+  num: number;
+  thumbnail?: string;
+  runtime?: string;
+}
+
+const TMDB_WEB_BASE = 'https://www.themoviedb.org';
+const TMDB_MEDIA_BASE = 'https://media.themoviedb.org';
+const TMDB_MAPPING_TTL = 1000 * 60 * 60 * 24; // 24 hours
+const TMDB_EPISODES_TTL = 1000 * 60 * 60 * 12; // 12 hours
+
+function parsePositiveIntParam(raw: unknown, max: number = 100_000_000): number | null {
+  if (typeof raw === 'number') {
+    if (Number.isSafeInteger(raw) && raw >= 1 && raw <= max) return raw;
+    return null;
+  }
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!/^\d+$/.test(trimmed)) return null;
+    const parsed = Number(trimmed);
+    if (Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= max) return parsed;
+  }
+  return null;
+}
+
+function normalizeAndValidateTmdbImageUrl(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  let url = raw.trim();
+  if (!url) return undefined;
+  if (url.startsWith('//')) {
+    url = `https:${url}`;
+  } else if (url.startsWith('/t/p/')) {
+    url = `${TMDB_MEDIA_BASE}${url}`;
+  }
+  if (
+    /^https:\/\/(media\.themoviedb\.org|image\.tmdb\.org)\/t\/p\/[A-Za-z0-9_]+\/[A-Za-z0-9_.-]+\.(jpg|jpeg|png|webp)$/i.test(
+      url
+    )
+  ) {
+    return url;
+  }
+  return undefined;
+}
+
+function pickBestTmdbImgUrl($img: cheerio.Cheerio<any>): string | undefined {
+  if (!$img || $img.length === 0) return undefined;
+
+  // Prefer crisp 2x image from srcset if present, otherwise fall back to src / data-src
+  const srcset = $img.attr('srcset') || $img.attr('data-srcset') || '';
+  if (srcset) {
+    const entries = srcset
+      .split(',')
+      .map((part) => part.trim().split(/\s+/))
+      .filter((parts) => parts.length >= 1 && parts[0]);
+    const twoX = entries.find((parts) => parts[1] === '2x');
+    if (twoX) {
+      const valid = normalizeAndValidateTmdbImageUrl(twoX[0]);
+      if (valid) return valid;
+    }
+    for (const parts of entries) {
+      const valid = normalizeAndValidateTmdbImageUrl(parts[0]);
+      if (valid) return valid;
+    }
+  }
+
+  return (
+    normalizeAndValidateTmdbImageUrl($img.attr('src')) ||
+    normalizeAndValidateTmdbImageUrl($img.attr('data-src'))
+  );
+}
+
+function sanitizeTmdbRuntime(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const cleaned = raw.replace(/\s+/g, ' ').trim();
+  if (!cleaned || cleaned.length > 16) return undefined;
+  if (/^\d+(?:h(?:\s+\d+m)?|m)$/i.test(cleaned)) {
+    return cleaned;
+  }
+  return undefined;
+}
+
+function extractNumericId(val: unknown): number | null {
+  if (typeof val === 'number' && Number.isSafeInteger(val) && val > 0) return val;
+  if (typeof val === 'string' && /^\d+$/.test(val.trim())) {
+    const n = Number(val.trim());
+    return Number.isSafeInteger(n) && n > 0 ? n : null;
+  }
+  if (Array.isArray(val)) {
+    for (const item of val) {
+      const id = extractNumericId(item);
+      if (id) return id;
+    }
+  }
+  return null;
+}
+
+function extractTmdbFromLocalMapping(mapping: any): Omit<ResolvedTmdbMapping, 'episodeOffset' | 'source'> | null {
+  if (!mapping || typeof mapping !== 'object') return null;
+
+  const rawTmdb = mapping.themoviedb_id ?? mapping.tmdb_id;
+  let tmdbId: number | null = null;
+  let mediaType: 'tv' | 'movie' = String(mapping.type || '').toUpperCase() === 'MOVIE' ? 'movie' : 'tv';
+
+  if (rawTmdb && typeof rawTmdb === 'object' && !Array.isArray(rawTmdb)) {
+    const tvId = extractNumericId(rawTmdb.tv);
+    const movieId = extractNumericId(rawTmdb.movie);
+    if (mediaType === 'movie' && movieId) {
+      tmdbId = movieId;
+    } else if (tvId) {
+      tmdbId = tvId;
+      mediaType = 'tv';
+    } else if (movieId) {
+      tmdbId = movieId;
+      mediaType = 'movie';
+    }
+  } else {
+    tmdbId = extractNumericId(rawTmdb);
+  }
+
+  if (!tmdbId) return null;
+
+  let season: number | null = null;
+  if (mediaType === 'tv') {
+    const rawSeason =
+      typeof mapping.season === 'object' && mapping.season !== null
+        ? mapping.season.tmdb
+        : mapping.tmdb_season;
+    const parsedSeason = extractNumericId(rawSeason);
+    if (parsedSeason && parsedSeason <= 200) {
+      season = parsedSeason;
+    }
+  }
+
+  return { tmdbId, mediaType, season };
+}
+
+interface AniZipMeta {
+  tmdbId: number | null;
+  mediaType: 'tv' | 'movie';
+  ep1Season: number | null;
+  ep1Number: number | null;
+}
+
+async function fetchAniZipMeta(anilistId: number | null, malId: number | null): Promise<AniZipMeta | null> {
+  const queryParam = malId ? `mal_id=${malId}` : anilistId ? `anilist_id=${anilistId}` : null;
+  if (!queryParam) return null;
+
+  const cacheKey = `anizip_meta_${queryParam}`;
+  const cached = getCached(cacheKey);
+  if (cached !== null) return cached === '__NONE__' ? null : cached;
+
+  return coalesce(cacheKey, async () => {
+    try {
+      const res = await axios.get(`https://api.ani.zip/mappings?${queryParam}`, {
+        timeout: 4500,
+        validateStatus: () => true,
+        headers: { 'User-Agent': 'AniHame/1.0' }
+      });
+      if (res.status !== 200 || !res.data || typeof res.data !== 'object') {
+        setCached(cacheKey, '__NONE__', 1000 * 60 * 30);
+        return null;
+      }
+
+      const mappings = res.data.mappings || {};
+      const tmdbId = extractNumericId(mappings.themoviedb_id);
+      const mediaType: 'tv' | 'movie' =
+        String(mappings.type || '').toUpperCase() === 'MOVIE' ? 'movie' : 'tv';
+
+      const ep1 = res.data.episodes?.['1'] || res.data.episodes?.[1];
+      const ep1Season = extractNumericId(ep1?.seasonNumber);
+      const ep1Number = extractNumericId(ep1?.episodeNumber);
+
+      const meta: AniZipMeta = { tmdbId, mediaType, ep1Season, ep1Number };
+      setCached(cacheKey, meta, TMDB_MAPPING_TTL);
+      return meta;
+    } catch (err) {
+      logApi('warn', 'anizip-map', err);
+      return null;
+    }
+  });
+}
+
+async function fetchArmTmdb(
+  anilistId: number | null,
+  malId: number | null
+): Promise<Omit<ResolvedTmdbMapping, 'episodeOffset' | 'source'> | null> {
+  const queries: Array<{ source: 'myanimelist' | 'anilist'; id: number }> = [];
+  if (malId) queries.push({ source: 'myanimelist', id: malId });
+  if (anilistId) queries.push({ source: 'anilist', id: anilistId });
+  if (queries.length === 0) return null;
+
+  for (const q of queries) {
+    const cacheKey = `arm_tmdb_${q.source}_${q.id}`;
+    const cached = getCached(cacheKey);
+    if (cached !== null) {
+      if (cached !== '__NONE__') return cached;
+      continue;
+    }
+
+    const found = await coalesce(cacheKey, async () => {
+      try {
+        const res = await axios.get(
+          `https://arm.haglund.dev/api/v2/ids?source=${q.source}&id=${q.id}`,
+          {
+            timeout: 4500,
+            validateStatus: () => true,
+            headers: { 'User-Agent': 'AniHame/1.0' }
+          }
+        );
+        if (res.status !== 200 || !res.data || typeof res.data !== 'object') {
+          setCached(cacheKey, '__NONE__', 1000 * 60 * 30);
+          return null;
+        }
+        const tmdbId = extractNumericId(res.data.themoviedb);
+        if (!tmdbId) {
+          setCached(cacheKey, '__NONE__', 1000 * 60 * 30);
+          return null;
+        }
+        const mediaType: 'tv' | 'movie' =
+          String(res.data.media || '').toLowerCase() === 'movie' ? 'movie' : 'tv';
+        const rawSeason = extractNumericId(res.data['themoviedb-season']);
+        const season = mediaType === 'tv' && rawSeason && rawSeason <= 200 ? rawSeason : null;
+        const parsed = { tmdbId, mediaType, season };
+        setCached(cacheKey, parsed, TMDB_MAPPING_TTL);
+        return parsed;
+      } catch (err) {
+        logApi('warn', 'arm-map', err);
+        return null;
+      }
+    });
+
+    if (found) return found;
+  }
+
+  return null;
+}
+
+async function resolveTmdbMapping(
+  anilistId: number | null,
+  malId: number | null
+): Promise<ResolvedTmdbMapping | null> {
+  if (!anilistId && !malId) return null;
+
+  const cacheKey = `tmdb_resolved_a${anilistId ?? 0}_m${malId ?? 0}`;
+  const cached = getCached(cacheKey);
+  if (cached !== null) return cached === '__NONE__' ? null : cached;
+
+  return coalesce(cacheKey, async () => {
+    if (anilistToMapping.size === 0 && malToMapping.size === 0) {
+      await preloadAnimeMappings();
+    }
+
+    let resolved: Omit<ResolvedTmdbMapping, 'episodeOffset'> | null = null;
+
+    // 1. Primary: preloaded O(1) anime-lists map (checks MAL ID and AniList ID)
+    const localEntry =
+      (malId ? malToMapping.get(malId) : null) ||
+      (anilistId ? anilistToMapping.get(anilistId) : null);
+
+    if (localEntry) {
+      const localTmdb = extractTmdbFromLocalMapping(localEntry);
+      if (localTmdb) {
+        resolved = { ...localTmdb, source: 'anime-lists' };
+      }
+    }
+
+    // 2. Fallback 1: ARM v2 IDs API
+    if (!resolved) {
+      const armTmdb = await fetchArmTmdb(anilistId, malId);
+      if (armTmdb) {
+        resolved = { ...armTmdb, source: 'arm' };
+      }
+    }
+
+    // 3. Fallback 2 + split-cour episode offset detection via ani.zip
+    let episodeOffset = 0;
+    const shouldCheckAniZip = !resolved || resolved.mediaType === 'tv';
+    if (shouldCheckAniZip) {
+      const aniZip = await fetchAniZipMeta(anilistId, malId);
+      if (aniZip) {
+        if (!resolved && aniZip.tmdbId) {
+          const inferredSeason =
+            aniZip.mediaType === 'tv' &&
+            aniZip.ep1Season &&
+            (aniZip.ep1Season > 1 || (aniZip.ep1Number && aniZip.ep1Number > 1))
+              ? aniZip.ep1Season
+              : null;
+
+          resolved = {
+            tmdbId: aniZip.tmdbId,
+            mediaType: aniZip.mediaType,
+            season: inferredSeason,
+            source: 'anizip'
+          };
+        }
+
+        if (resolved && resolved.mediaType === 'tv') {
+          if (
+            resolved.season !== null &&
+            aniZip.ep1Season === resolved.season &&
+            aniZip.ep1Number &&
+            aniZip.ep1Number > 1 &&
+            aniZip.ep1Number <= 500
+          ) {
+            episodeOffset = aniZip.ep1Number - 1;
+          } else if (
+            resolved.season === null &&
+            aniZip.ep1Season &&
+            aniZip.ep1Season <= 200 &&
+            (aniZip.ep1Season > 1 || (aniZip.ep1Number && aniZip.ep1Number > 1))
+          ) {
+            resolved = { ...resolved, season: aniZip.ep1Season };
+            if (aniZip.ep1Number && aniZip.ep1Number > 1 && aniZip.ep1Number <= 500) {
+              episodeOffset = aniZip.ep1Number - 1;
+            }
+          }
+        }
+      }
+    }
+
+    if (!resolved) {
+      setCached(cacheKey, '__NONE__', 1000 * 60 * 30);
+      return null;
+    }
+
+    const finalMapping: ResolvedTmdbMapping = { ...resolved, episodeOffset };
+    setCached(cacheKey, finalMapping, TMDB_MAPPING_TTL);
+    return finalMapping;
+  });
+}
+
+async function fetchTmdbHtml(path: string): Promise<string | null> {
+  if (!/^\/(tv|movie)\/\d+(?:\/seasons|\/season\/\d+)?$/.test(path)) {
+    return null;
+  }
+
+  try {
+    // Use clean default axios headers (TMDB WAF blocks spoofed Chrome UAs without browser TLS fingerprints)
+    const res = await axios.get(`${TMDB_WEB_BASE}${path}`, {
+      timeout: 8000,
+      responseType: 'text',
+      validateStatus: () => true,
+      headers: {
+        'Accept-Language': 'en-US,en;q=0.9'
+      }
+    });
+    if (res.status === 200 && typeof res.data === 'string' && res.data.length > 0) {
+      return res.data;
+    }
+    if (res.status !== 404) {
+      logApi('warn', 'tmdb-scrape', `HTTP ${res.status} on ${path}`);
+    }
+    return null;
+  } catch (err) {
+    logApi('warn', 'tmdb-scrape', err);
+    return null;
+  }
+}
+
+async function scrapeTmdbSeasonPage(tmdbId: number, seasonNumber: number): Promise<ScrapedTmdbEpisode[]> {
+  const cacheKey = `tmdb_season_html_${tmdbId}_s${seasonNumber}`;
+  const cached = getCached(cacheKey);
+  if (cached !== null) return cached;
+
+  return coalesce(cacheKey, async () => {
+    const html = await fetchTmdbHtml(`/tv/${tmdbId}/season/${seasonNumber}`);
+    if (!html) {
+      setCached(cacheKey, [], 1000 * 60 * 30);
+      return [];
+    }
+
+    const $ = cheerio.load(html);
+    const list = $('div.episode_list').first();
+    if (list.length === 0) {
+      setCached(cacheKey, [], 1000 * 60 * 30);
+      return [];
+    }
+
+    const scraped: ScrapedTmdbEpisode[] = [];
+    list.find('div.card').each((idx, el) => {
+      const card = $(el);
+      const rawEpNum = card.find('span.episode_number').first().text().trim();
+      const parsedNum = parsePositiveIntParam(rawEpNum, 10000) ?? idx + 1;
+      const thumbnail = pickBestTmdbImgUrl(card.find('div.image img').first());
+      const runtime = sanitizeTmdbRuntime(card.find('span.runtime').first().text());
+
+      if (thumbnail || runtime) {
+        const entry: ScrapedTmdbEpisode = { num: parsedNum };
+        if (thumbnail) entry.thumbnail = thumbnail;
+        if (runtime) entry.runtime = runtime;
+        scraped.push(entry);
+      }
+    });
+
+    setCached(cacheKey, scraped, TMDB_EPISODES_TTL);
+    return scraped;
+  });
+}
+
+async function scrapeTmdbSeasonsOverview(
+  tmdbId: number
+): Promise<Array<{ seasonNumber: number; episodeCount: number }>> {
+  const cacheKey = `tmdb_seasons_overview_${tmdbId}`;
+  const cached = getCached(cacheKey);
+  if (cached !== null) return cached;
+
+  return coalesce(cacheKey, async () => {
+    const html = await fetchTmdbHtml(`/tv/${tmdbId}/seasons`);
+    if (!html) {
+      setCached(cacheKey, [], 1000 * 60 * 60);
+      return [];
+    }
+
+    const $ = cheerio.load(html);
+    const seasons: Array<{ seasonNumber: number; episodeCount: number }> = [];
+    const seen = new Set<number>();
+
+    $('div.season_wrapper').each((_, el) => {
+      const wrapper = $(el);
+      const href = wrapper.find('a[href*="/season/"]').first().attr('href') || '';
+      const seasonMatch = href.match(/\/season\/(\d+)/);
+      const seasonNumber = seasonMatch ? parsePositiveIntParam(seasonMatch[1], 200) : null;
+      if (!seasonNumber || seen.has(seasonNumber)) return;
+
+      const h4Text = wrapper.find('h4').first().text();
+      const epMatch = h4Text.match(/(\d+)\s+Episodes?/i);
+      const episodeCount = epMatch ? parsePositiveIntParam(epMatch[1], 5000) : null;
+      if (!episodeCount) return;
+
+      seen.add(seasonNumber);
+      seasons.push({ seasonNumber, episodeCount });
+    });
+
+    seasons.sort((a, b) => a.seasonNumber - b.seasonNumber);
+    setCached(cacheKey, seasons, TMDB_MAPPING_TTL);
+    return seasons;
+  });
+}
+
+async function scrapeContinuousTmdbEpisodes(
+  tmdbId: number,
+  start: number,
+  end: number
+): Promise<ScrapedTmdbEpisode[]> {
+  const seasons = await scrapeTmdbSeasonsOverview(tmdbId);
+
+  // Fallback to Season 1 directly if /seasons overview returned nothing
+  if (seasons.length === 0) {
+    const s1 = await scrapeTmdbSeasonPage(tmdbId, 1);
+    return s1.filter((ep) => ep.num >= start && ep.num <= end);
+  }
+
+  const targetSeasons: Array<{ seasonNumber: number; cumStart: number }> = [];
+  let cursor = 1;
+  for (const s of seasons) {
+    const cumStart = cursor;
+    const cumEnd = cursor + s.episodeCount - 1;
+    cursor = cumEnd + 1;
+    if (cumEnd >= start && cumStart <= end) {
+      targetSeasons.push({ seasonNumber: s.seasonNumber, cumStart });
+    }
+  }
+
+  // Cap concurrent TMDB season fetches per range request
+  const boundedSeasons = targetSeasons.slice(0, 4);
+  const seasonResults = await Promise.all(
+    boundedSeasons.map(async ({ seasonNumber, cumStart }) => {
+      const eps = await scrapeTmdbSeasonPage(tmdbId, seasonNumber);
+      if (eps.length === 0) return [];
+      // Some long-running anime on TMDB (e.g. One Piece) already use continuous absolute
+      // episode numbers across seasons (Season 2 starts at 62), while others reset to 1.
+      const usesAbsoluteNumbering = cumStart > 1 && eps[0].num >= cumStart;
+      const mapped: ScrapedTmdbEpisode[] = [];
+      for (const ep of eps) {
+        const globalNum = usesAbsoluteNumbering ? ep.num : cumStart + (ep.num - 1);
+        if (globalNum < start || globalNum > end) continue;
+        mapped.push({
+          num: globalNum,
+          ...(ep.thumbnail ? { thumbnail: ep.thumbnail } : {}),
+          ...(ep.runtime ? { runtime: ep.runtime } : {})
+        });
+      }
+      return mapped;
+    })
+  );
+
+  return seasonResults.flat().sort((a, b) => a.num - b.num);
+}
+
+async function scrapeTmdbMoviePage(tmdbId: number): Promise<ScrapedTmdbEpisode | null> {
+  const cacheKey = `tmdb_movie_html_${tmdbId}`;
+  const cached = getCached(cacheKey);
+  if (cached !== null) return cached === '__NONE__' ? null : cached;
+
+  return coalesce(cacheKey, async () => {
+    const html = await fetchTmdbHtml(`/movie/${tmdbId}`);
+    if (!html) {
+      setCached(cacheKey, '__NONE__', 1000 * 60 * 60);
+      return null;
+    }
+
+    const $ = cheerio.load(html);
+    const thumbnail = normalizeAndValidateTmdbImageUrl($('meta[property="og:image"]').attr('content'));
+    const runtime = sanitizeTmdbRuntime($('span.runtime').first().text());
+
+    if (!thumbnail && !runtime) {
+      setCached(cacheKey, '__NONE__', 1000 * 60 * 60);
+      return null;
+    }
+
+    const ep: ScrapedTmdbEpisode = {
+      num: 1,
+      ...(thumbnail ? { thumbnail } : {}),
+      ...(runtime ? { runtime } : {})
+    };
+    setCached(cacheKey, ep, TMDB_EPISODES_TTL);
+    return ep;
+  });
+}
+
+// GET /api/tmdb/resolve?anilistId=...&malId=...
+app.get("/api/tmdb/resolve", async (req, res) => {
+  const anilistId = parsePositiveIntParam(req.query.anilistId);
+  const malId = parsePositiveIntParam(req.query.malId);
+
+  if (!anilistId && !malId) {
+    return res.status(400).json({ error: "Provide a valid anilistId or malId" });
+  }
+
+  try {
+    const mapping = await resolveTmdbMapping(anilistId, malId);
+    if (!mapping) {
+      return res.status(404).json({ error: "TMDB mapping not found" });
+    }
+    return res.json(mapping);
+  } catch (err) {
+    logApi('error', 'tmdb-resolve', err);
+    return res.status(500).json({ error: "Failed to resolve TMDB ID" });
+  }
+});
+
+// GET /api/tmdb/episodes?anilistId=...&malId=...&start=1&end=25
+app.get("/api/tmdb/episodes", async (req, res) => {
+  const anilistId = parsePositiveIntParam(req.query.anilistId);
+  const malId = parsePositiveIntParam(req.query.malId);
+
+  if (!anilistId && !malId) {
+    return res.status(400).json({ error: "Provide a valid anilistId or malId" });
+  }
+
+  const start = parsePositiveIntParam(req.query.start, 10000) ?? 1;
+  const rawEnd = parsePositiveIntParam(req.query.end, 10000) ?? Math.min(10000, start + 24);
+  const end = Math.min(10000, Math.max(start, Math.min(rawEnd, start + 199)));
+
+  const mapping = await resolveTmdbMapping(anilistId, malId);
+  if (!mapping) {
+    return res.json({
+      tmdbId: null,
+      mediaType: null,
+      season: null,
+      episodeOffset: 0,
+      episodes: []
+    });
+  }
+
+  const rangeCacheKey = `tmdb_web_eps_${mapping.mediaType}_${mapping.tmdbId}_s${mapping.season ?? 'all'}_o${mapping.episodeOffset}_${start}_${end}`;
+  const cachedRange = getCached(rangeCacheKey);
+  if (cachedRange) {
+    return res.json(cachedRange);
+  }
+
+  try {
+    const payload = await coalesce(rangeCacheKey, async () => {
+      let episodes: ScrapedTmdbEpisode[] = [];
+
+      if (mapping.mediaType === 'movie') {
+        if (start <= 1 && end >= 1) {
+          const movieEp = await scrapeTmdbMoviePage(mapping.tmdbId);
+          if (movieEp) episodes = [movieEp];
+        }
+      } else if (mapping.season !== null) {
+        const seasonEps = await scrapeTmdbSeasonPage(mapping.tmdbId, mapping.season);
+        if (seasonEps.length > 0) {
+          const mapped: ScrapedTmdbEpisode[] = [];
+          for (const ep of seasonEps) {
+            const animeEpNum = ep.num - mapping.episodeOffset;
+            if (animeEpNum < start || animeEpNum > end) continue;
+            mapped.push({
+              num: animeEpNum,
+              ...(ep.thumbnail ? { thumbnail: ep.thumbnail } : {}),
+              ...(ep.runtime ? { runtime: ep.runtime } : {})
+            });
+          }
+          episodes = mapped.sort((a, b) => a.num - b.num);
+        } else {
+          // Fallback if mapped season number differs from TMDB's season numbering
+          episodes = await scrapeContinuousTmdbEpisodes(mapping.tmdbId, start, end);
+        }
+      } else {
+        episodes = await scrapeContinuousTmdbEpisodes(mapping.tmdbId, start, end);
+      }
+
+      const result = {
+        ...mapping,
+        episodes
+      };
+      setCached(rangeCacheKey, result, TMDB_EPISODES_TTL);
+      return result;
+    });
+
+    return res.json(payload);
+  } catch (err) {
+    logApi('warn', 'tmdb-episodes', err);
+    return res.json({
+      ...mapping,
+      episodes: []
+    });
   }
 });
 

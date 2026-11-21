@@ -1,24 +1,57 @@
 /**
- * Utility to preload an image into browser cache
+ * Utility to preload and decode an image into browser cache
  */
-export function preloadImage(url: string): Promise<boolean> {
+export function preloadImage(url: string, noReferrer: boolean = false): Promise<boolean> {
   if (!url || typeof url !== 'string') return Promise.resolve(false);
   return new Promise((resolve) => {
     try {
       const img = new Image();
-      if (img.complete && img.naturalWidth > 0) {
-        return resolve(true);
+      if (noReferrer) {
+        img.referrerPolicy = 'no-referrer';
       }
-      img.onload = () => resolve(true);
+      const finish = (ok: boolean) => {
+        if (ok && typeof img.decode === 'function') {
+          img.decode().then(() => resolve(true)).catch(() => resolve(true));
+        } else {
+          resolve(ok);
+        }
+      };
+      img.onload = () => finish(true);
       img.onerror = () => resolve(false); // Don't block on 404 or network errors
       img.src = url;
       if (img.complete && img.naturalWidth > 0) {
-        resolve(true);
+        finish(true);
       }
     } catch {
       resolve(false);
     }
   });
+}
+
+/**
+ * Preload and decode a deduplicated list of image URLs so all thumbnails can
+ * be revealed together in a single frame without staggered image popping.
+ */
+export async function preloadImageUrls(
+  urls: Array<string | null | undefined>,
+  maxWaitMs: number = 5000
+): Promise<void> {
+  const uniqueUrls = Array.from(
+    new Set(
+      urls
+        .filter((u): u is string => typeof u === 'string' && u.trim().length > 0)
+        .map((u) => u.trim())
+    )
+  );
+  if (uniqueUrls.length === 0) return;
+
+  const loadPromises = uniqueUrls.map((url) => preloadImage(url, true));
+  const timeoutPromise = new Promise<void>((resolve) => setTimeout(resolve, maxWaitMs));
+
+  await Promise.race([
+    Promise.all(loadPromises),
+    timeoutPromise
+  ]);
 }
 
 /**
@@ -56,7 +89,7 @@ export async function preloadAnimeThumbnails(
 
   if (urls.length === 0) return;
 
-  const loadPromises = urls.map(preloadImage);
+  const loadPromises = urls.map((url) => preloadImage(url));
   const timeoutPromise = new Promise<void>((resolve) => setTimeout(resolve, maxWaitMs));
 
   await Promise.race([

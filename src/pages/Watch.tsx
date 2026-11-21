@@ -10,8 +10,9 @@ import { useAuth, WatchServerType, DEFAULT_SERVER_ORDER, sanitizeServerOrder, ge
 import { MarqueeText } from '../components/MarqueeText';
 import { AnimeInfo } from '../components/ui/AnimeInfo';
 import { ServerOrderModal } from '../components/player/ServerOrderModal';
-import { jikanClient, JikanEpisodeThumb } from '../api/jikan';
+import { tmdbClient, TmdbEpisodeThumb } from '../api/tmdb';
 import { malClient, MalScrapedEpisode } from '../api/mal';
+import { preloadImageUrls } from '../utils/imagePreload';
 import { appLog } from '../lib/logger';
 
 const SERIES_SERVER_SESSION_KEY = 'anihame_series_server';
@@ -76,7 +77,9 @@ export default function Watch() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [malId, setMalId] = useState<number | null>(null);
   const [malEpisodes, setMalEpisodes] = useState<MalScrapedEpisode[]>([]);
-  const [episodeThumbs, setEpisodeThumbs] = useState<JikanEpisodeThumb[]>([]);
+  const [episodeThumbs, setEpisodeThumbs] = useState<TmdbEpisodeThumb[]>([]);
+  const [thumbsReady, setThumbsReady] = useState(false);
+  const loadedThumbRangeRef = useRef<string>('');
   const [watchedEpisodes, setWatchedEpisodes] = useState<number[]>([]);
   const [malTitle, setMalTitle] = useState<string | null>(null);
   const [zhenTubeUrl, setZhenTubeUrl] = useState<string | null>(null);
@@ -210,6 +213,8 @@ export default function Watch() {
     setError('');
     setMalEpisodes([]);
     setEpisodeThumbs([]);
+    setThumbsReady(false);
+    loadedThumbRangeRef.current = '';
     setMalId(null);
     setImdbId(null);
     setMalTitle(null);
@@ -284,10 +289,10 @@ export default function Watch() {
     }
   }, [anime, animeId, currentEp, profile?.preferences?.titleLanguage]);
 
-  // Fetch episode titles + DD/MM/YYYY air dates ONLY from MAL episode page scraper,
-  // and episode thumbnails ONLY from Jikan /videos/episodes for the active 25-episode chunk
+  // Fetch episode titles + DD/MM/YYYY air dates from MAL episode page scraper,
+  // and preload ALL TMDB episode thumbnails for the active 25-episode chunk before revealing them together
   useEffect(() => {
-    if (!malId || !anime) return;
+    if (!anime) return;
     let isCancelled = false;
 
     const pStart = episodeChunk * 25 + 1;
@@ -295,28 +300,67 @@ export default function Watch() {
       ? anime.nextAiringEpisode.episode - 1
       : (anime.episodes || pStart + 24);
     const pEnd = Math.min(pStart + 24, Math.max(pStart, maxKnownEp));
-    const romajiTitle = anime.title.romaji || anime.title.english || '';
+    const resolvedMalId = malId || anime.idMal || null;
 
-    malClient
-      .getEpisodesForRange(malId, romajiTitle, { start: pStart, end: pEnd }, (eps) => {
-        if (!isCancelled) {
-          setMalEpisodes(eps);
-        }
-      })
-      .catch(() => {});
+    if (resolvedMalId) {
+      const romajiTitle = anime.title.romaji || anime.title.english || '';
+      malClient
+        .getEpisodesForRange(resolvedMalId, romajiTitle, { start: pStart, end: pEnd }, (eps) => {
+          if (!isCancelled) {
+            setMalEpisodes(eps);
+          }
+        })
+        .catch(() => {});
+    }
 
-    jikanClient
-      .getThumbnailsForRange(malId, { start: pStart, end: pEnd }, (thumbs) => {
-        if (!isCancelled) {
-          setEpisodeThumbs(thumbs);
+    const rangeKey = `${anime.id}_${pStart}_${pEnd}`;
+    const alreadyLoadedRange = loadedThumbRangeRef.current === rangeKey;
+    if (!alreadyLoadedRange) {
+      setThumbsReady(false);
+    }
+
+    const fallbackThumb = anime.bannerImage || anime.coverImage.extraLarge || anime.coverImage.large;
+
+    (async () => {
+      try {
+        const thumbs = await tmdbClient.getThumbnailsForRange(
+          { anilistId: anime.id, malId: resolvedMalId },
+          { start: pStart, end: pEnd }
+        );
+        if (isCancelled) return;
+
+        const thumbByNum = new Map<number, string>();
+        for (const t of thumbs) {
+          if (t.num && t.thumbnail) thumbByNum.set(t.num, t.thumbnail);
         }
-      })
-      .catch(() => {});
+
+        const urlsToPreload: string[] = [];
+        for (let epNum = pStart; epNum <= pEnd; epNum++) {
+          const url = thumbByNum.get(epNum) || fallbackThumb;
+          if (url) urlsToPreload.push(url);
+        }
+
+        await preloadImageUrls(urlsToPreload, 5000);
+        if (isCancelled) return;
+
+        loadedThumbRangeRef.current = rangeKey;
+        setEpisodeThumbs(thumbs);
+        setThumbsReady(true);
+      } catch {
+        if (!isCancelled) {
+          await preloadImageUrls([fallbackThumb], 2500);
+          if (!isCancelled) {
+            loadedThumbRangeRef.current = rangeKey;
+            setThumbsReady(true);
+          }
+        }
+      }
+    })();
 
     return () => {
       isCancelled = true;
     };
-  }, [malId, episodeChunk, anime?.title?.romaji, anime?.episodes, anime?.nextAiringEpisode?.episode]);
+  }, [malId, episodeChunk, anime?.id, anime?.idMal, anime?.title?.romaji, anime?.episodes, anime?.nextAiringEpisode?.episode]);
 
   useEffect(() => {
     if (isHanimeMode() && anime?.idMal) {
@@ -519,7 +563,9 @@ export default function Watch() {
 
   const episodeTitleMap = new Map<number, string>();
   const episodeThumbMap = new Map<number, string>();
+  const episodeRuntimeMap = new Map<number, string>();
   const episodeAiredMap = new Map<number, string>();
+  const defaultEpisodeRuntime = anime.duration ? `${anime.duration}m` : '';
   
   // Episode titles & DD/MM/YYYY air dates exclusively from MAL episode page scraper
   if (malEpisodes && malEpisodes.length > 0) {
@@ -536,14 +582,19 @@ export default function Watch() {
     });
   }
 
-  // Episode thumbnails exclusively from Jikan /videos/episodes
+  // Episode thumbnails & runtimes from TMDB season page scraper
   if (episodeThumbs && episodeThumbs.length > 0) {
     episodeThumbs.forEach((ep) => {
       if (ep.num && ep.thumbnail) {
         episodeThumbMap.set(ep.num, ep.thumbnail);
       }
+      if (ep.num && ep.runtime) {
+        episodeRuntimeMap.set(ep.num, ep.runtime);
+      }
     });
   }
+
+  const currentEpRuntime = episodeRuntimeMap.get(currentEp) || defaultEpisodeRuntime;
 
   return (
     <div className="w-full p-4 sm:p-6 lg:p-8 flex flex-col min-h-[calc(100vh-3.5rem)] pb-12">
@@ -560,10 +611,13 @@ export default function Watch() {
               {displayAnimeTitle}
               <span className="text-primary ml-2 font-medium">Episode {currentEp}</span>
             </h1>
-            {(episodeTitleMap.get(currentEp) || (showEpisodeDate && episodeAiredMap.get(currentEp))) && (
+            {(episodeTitleMap.get(currentEp) || currentEpRuntime || (showEpisodeDate && episodeAiredMap.get(currentEp))) && (
               <div className="flex items-center gap-2 text-xs text-gray-400 mt-0.5 truncate">
                 {episodeTitleMap.get(currentEp) && (
                   <span className="truncate">{episodeTitleMap.get(currentEp)}</span>
+                )}
+                {currentEpRuntime && (
+                  <span className="text-gray-400/90 shrink-0 font-medium">{currentEpRuntime}</span>
                 )}
                 {showEpisodeDate && episodeAiredMap.get(currentEp) && (
                   <span className="text-gray-500 shrink-0">{episodeAiredMap.get(currentEp)}</span>
@@ -1028,6 +1082,7 @@ export default function Watch() {
             const isWatched = watchedEpisodes.includes(epNum) && epNum !== currentEp;
             const fallbackThumb = anime.bannerImage || anime.coverImage.extraLarge || anime.coverImage.large;
             const thumbSrc = episodeThumbMap.get(epNum) || fallbackThumb;
+            const epRuntime = episodeRuntimeMap.get(epNum) || defaultEpisodeRuntime;
             return isListView ? (
               <Link
                 key={epNum}
@@ -1041,18 +1096,34 @@ export default function Watch() {
                 )}
               >
                 <div className="w-[76px] aspect-video flex-shrink-0 relative rounded-lg overflow-hidden bg-gray-900">
-                  <img 
-                    src={thumbSrc} 
-                    referrerPolicy="no-referrer"
-                    loading="lazy"
-                    onError={(e) => {
-                      if (fallbackThumb && e.currentTarget.src !== fallbackThumb) {
-                        e.currentTarget.src = fallbackThumb;
-                      }
-                    }}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
-                    alt={`Episode ${epNum}`} 
-                  />
+                  {thumbsReady ? (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                      className="w-full h-full"
+                    >
+                      <img 
+                        src={thumbSrc} 
+                        referrerPolicy="no-referrer"
+                        decoding="sync"
+                        onError={(e) => {
+                          if (fallbackThumb && e.currentTarget.src !== fallbackThumb) {
+                            e.currentTarget.src = fallbackThumb;
+                          }
+                        }}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                        alt={`Episode ${epNum}`} 
+                      />
+                    </motion.div>
+                  ) : (
+                    <div className="w-full h-full bg-white/[0.06] animate-pulse" />
+                  )}
+                  {epRuntime && (
+                    <span className="absolute bottom-0.5 right-0.5 px-1 py-[1px] rounded bg-black/80 text-[8px] font-bold text-white leading-tight tracking-tight pointer-events-none">
+                      {epRuntime}
+                    </span>
+                  )}
                 </div>
                 <div className="flex-1 min-w-0 overflow-hidden flex flex-col justify-center gap-0.5 py-0.5">
                   <span className={cn("text-xs font-black leading-tight block", epNum === currentEp ? "text-primary" : "text-white")}>Ep {epNum}</span>
@@ -1073,6 +1144,7 @@ export default function Watch() {
                 to={`/watch/${anime.id}/${epNum}`}
                 title={[
                   episodeTitleMap.get(epNum) || `Episode ${epNum}`,
+                  epRuntime,
                   showEpisodeDate && episodeAiredMap.get(epNum) ? episodeAiredMap.get(epNum) : ''
                 ].filter(Boolean).join(' • ')}
                 className={cn(
@@ -1084,18 +1156,29 @@ export default function Watch() {
                 )}
               >
                 <div className="absolute inset-0 w-full h-full">
-                  <img 
-                    src={thumbSrc} 
-                    alt={`Episode ${epNum}`} 
-                    referrerPolicy="no-referrer"
-                    loading="lazy"
-                    onError={(e) => {
-                      if (fallbackThumb && e.currentTarget.src !== fallbackThumb) {
-                        e.currentTarget.src = fallbackThumb;
-                      }
-                    }}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 opacity-60 group-hover:opacity-30" 
-                  />
+                  {thumbsReady ? (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                      className="w-full h-full"
+                    >
+                      <img 
+                        src={thumbSrc} 
+                        alt={`Episode ${epNum}`} 
+                        referrerPolicy="no-referrer"
+                        decoding="sync"
+                        onError={(e) => {
+                          if (fallbackThumb && e.currentTarget.src !== fallbackThumb) {
+                            e.currentTarget.src = fallbackThumb;
+                          }
+                        }}
+                        className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700 opacity-60 group-hover:opacity-30" 
+                      />
+                    </motion.div>
+                  ) : (
+                    <div className="w-full h-full bg-white/[0.06] animate-pulse" />
+                  )}
                   <div className="absolute inset-0 opacity-80 bg-gradient-to-t from-[#0B0C0F] via-[#0B0C0F]/40 to-transparent" />
                 </div>
                 
@@ -1107,6 +1190,11 @@ export default function Watch() {
                     )}>
                       {epNum}
                     </span>
+                    {epRuntime && (
+                      <span className="text-[8px] font-semibold text-gray-300/90 leading-none mt-0.5 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
+                        {epRuntime}
+                      </span>
+                    )}
                   </div>
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 px-1.5 py-1 opacity-0 group-hover:opacity-100 transition-all duration-300 scale-105 group-hover:scale-100 overflow-hidden">
                     <MarqueeText 
