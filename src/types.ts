@@ -31,7 +31,10 @@ export interface AnimeMedia {
   updatedAt?: number;
   description: string;
   episodes: number | null;
+  duration?: number | null;
   status: string;
+  season?: string | null;
+  seasonYear?: number | null;
   startDate?: { year: number | null; month: number | null; day: number | null };
   endDate?: { year: number | null; month: number | null; day: number | null };
   studios?: { edges: { isMain: boolean; node: { name: string } }[] };

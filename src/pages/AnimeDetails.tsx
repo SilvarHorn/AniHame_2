@@ -13,6 +13,7 @@ import AnimeCard from '../components/ui/AnimeCard';
 import { preloadAnimeThumbnails, preloadImageUrls } from '../utils/imagePreload';
 import { tmdbClient, TmdbEpisodeThumb } from '../api/tmdb';
 import { malClient, MalScrapedEpisode } from '../api/mal';
+import { isUpcomingAnime, getUpcomingAirDateText } from '../utils/upcoming';
 import { appLog } from '../lib/logger';
 
 function RangeGridSelect({ value, onChange, options }: { value: string, onChange: (v: string)=>void, options: string[] }) {
@@ -224,7 +225,7 @@ export default function AnimeDetails() {
   // Fetch episode titles + DD/MM/YYYY air dates from MAL episode page scraper,
   // and preload ALL TMDB episode thumbnails for the active range before revealing them together
   useEffect(() => {
-    if (!anime) return;
+    if (!anime || isUpcomingAnime(anime)) return;
     let isCancelled = false;
 
     const totalEps = anime.nextAiringEpisode
@@ -381,10 +382,13 @@ export default function AnimeDetails() {
   const titleLanguage = profile?.preferences?.titleLanguage || 'english';
   const title = malTitle || getPreferredAnimeTitle(anime.title, titleLanguage, isHanimeMode());
   
+  const isUpcoming = isUpcomingAnime(anime);
+  const upcomingAirDateText = isUpcoming ? getUpcomingAirDateText(anime) : null;
+
   // Create episode boxes
-  let episodeCount = anime.episodes || 12; // Fallback
-  if (anime.nextAiringEpisode) {
-    episodeCount = anime.nextAiringEpisode.episode - 1;
+  let episodeCount = isUpcoming ? 0 : (anime.episodes || 12); // Fallback
+  if (!isUpcoming && anime.nextAiringEpisode) {
+    episodeCount = Math.max(0, anime.nextAiringEpisode.episode - 1);
   }
   
   const episodeTitleMap = new Map<number, string>();
@@ -429,7 +433,9 @@ export default function AnimeDetails() {
     }
   }
 
-  let episodes = Array.from({ length: Math.max(1, episodeCount) }, (_, i) => i + 1);
+  let episodes = isUpcoming || episodeCount <= 0
+    ? []
+    : Array.from({ length: episodeCount }, (_, i) => i + 1);
 
   if (episodeRange && episodeRange.includes(' - ')) {
     const [start, end] = episodeRange.split(' - ').map(Number);
@@ -479,13 +485,20 @@ export default function AnimeDetails() {
               />
             </div>
             
-            <Link 
-              to={`/watch/${anime.id}/1`}
-              className="w-full bg-primary hover:bg-primary-hover text-[#0B0C0F] font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 hover:-translate-y-0.5 active:scale-95 shadow-lg mb-3"
-            >
-              <Play size={20} fill="currentColor" />
-              Watch Episode 1
-            </Link>
+            {isUpcoming ? (
+              <div className="w-full bg-white/[0.06] text-gray-300 border border-white/10 font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 mb-3 text-sm cursor-default select-none">
+                <Calendar size={18} className="text-primary shrink-0" />
+                <span>Upcoming Anime</span>
+              </div>
+            ) : (
+              <Link 
+                to={`/watch/${anime.id}/1`}
+                className="w-full bg-primary hover:bg-primary-hover text-[#0B0C0F] font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 hover:-translate-y-0.5 active:scale-95 shadow-lg mb-3"
+              >
+                <Play size={20} fill="currentColor" />
+                Watch Episode 1
+              </Link>
+            )}
             
             <div className="relative mb-4">
               <select
@@ -568,33 +581,48 @@ export default function AnimeDetails() {
                   Episodes
                 </h2>
                 
-                <div className="flex flex-wrap items-center gap-2">
-                  {rangeOptions.length > 0 && (
-                    <div className="w-[160px]">
-                      <RangeGridSelect 
-                        value={episodeRange} 
-                        onChange={setEpisodeRange} 
-                        options={rangeOptions} 
-                      />
-                    </div>
-                  )}
-                  <button 
-                    onClick={() => setIsListView(!isListView)}
-                    className="p-2 text-gray-400 hover:text-primary transition-all duration-200 active:scale-90 bg-white/[0.06] hover:bg-white/[0.12] rounded-lg border border-white/10 h-[38px] w-[38px] flex items-center justify-center"
-                    title="Toggle View Mode"
-                  >
-                    {isListView ? <LayoutGrid size={18} /> : <ListIcon size={18} />}
-                  </button>
-                  <button 
-                    onClick={() => setSortDesc(!sortDesc)}
-                    className="p-2 text-gray-400 hover:text-primary transition-all duration-200 active:scale-90 bg-white/[0.06] hover:bg-white/[0.12] rounded-lg border border-white/10 h-[38px] w-[38px] flex items-center justify-center"
-                    title="Sort Order"
-                  >
-                    <ArrowDownUp size={18} />
-                  </button>
-                </div>
+                {!isUpcoming && episodes.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {rangeOptions.length > 0 && (
+                      <div className="w-[160px]">
+                        <RangeGridSelect 
+                          value={episodeRange} 
+                          onChange={setEpisodeRange} 
+                          options={rangeOptions} 
+                        />
+                      </div>
+                    )}
+                    <button 
+                      onClick={() => setIsListView(!isListView)}
+                      className="p-2 text-gray-400 hover:text-primary transition-all duration-200 active:scale-90 bg-white/[0.06] hover:bg-white/[0.12] rounded-lg border border-white/10 h-[38px] w-[38px] flex items-center justify-center"
+                      title="Toggle View Mode"
+                    >
+                      {isListView ? <LayoutGrid size={18} /> : <ListIcon size={18} />}
+                    </button>
+                    <button 
+                      onClick={() => setSortDesc(!sortDesc)}
+                      className="p-2 text-gray-400 hover:text-primary transition-all duration-200 active:scale-90 bg-white/[0.06] hover:bg-white/[0.12] rounded-lg border border-white/10 h-[38px] w-[38px] flex items-center justify-center"
+                      title="Sort Order"
+                    >
+                      <ArrowDownUp size={18} />
+                    </button>
+                  </div>
+                )}
               </div>
               
+              {isUpcoming || episodes.length === 0 ? (
+                <div className="flex flex-col items-center justify-center text-center py-12 px-4 rounded-xl bg-white/[0.03] border border-white/5">
+                  <div className="w-12 h-12 rounded-full bg-primary/15 border border-primary/25 flex items-center justify-center mb-3">
+                    <Calendar size={22} className="text-primary" />
+                  </div>
+                  <p className="text-lg font-bold text-[#FBF3E5]">Upcoming Anime</p>
+                  {upcomingAirDateText ? (
+                    <p className="text-sm text-primary font-medium mt-1.5">{upcomingAirDateText}</p>
+                  ) : (
+                    <p className="text-xs text-gray-400 mt-1.5">Episodes will appear here once it airs.</p>
+                  )}
+                </div>
+              ) : (
               <AnimatePresence mode="wait">
                 {showEpisodes ? (
                   <motion.div 
@@ -750,6 +778,7 @@ export default function AnimeDetails() {
                   </div>
                 )}
               </AnimatePresence>
+              )}
             </div>
 
             {/* Related Anime Section */}

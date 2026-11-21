@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { fetchAnilist, ANIME_DETAILS_QUERY, isHanimeMode } from '../api/anilist';
 import { AnimeMedia } from '../types';
 import { saveProgress } from '../store/progress';
-import { ChevronLeft, ChevronRight, ChevronDown, ArrowDownUp, LayoutGrid, List as ListIcon, PlayCircle, ExternalLink, SlidersHorizontal, Server } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, ArrowDownUp, LayoutGrid, List as ListIcon, PlayCircle, ExternalLink, SlidersHorizontal, Server, Calendar } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { useAuth, WatchServerType, DEFAULT_SERVER_ORDER, sanitizeServerOrder, getPreferredAnimeTitle, getPreferredEpisodeTitle } from '../contexts/AuthContext';
@@ -13,6 +13,7 @@ import { ServerOrderModal } from '../components/player/ServerOrderModal';
 import { tmdbClient, TmdbEpisodeThumb } from '../api/tmdb';
 import { malClient, MalScrapedEpisode } from '../api/mal';
 import { preloadImageUrls } from '../utils/imagePreload';
+import { isUpcomingAnime, getUpcomingAirDateText } from '../utils/upcoming';
 import { appLog } from '../lib/logger';
 
 const SERIES_SERVER_SESSION_KEY = 'anihame_series_server';
@@ -292,7 +293,7 @@ export default function Watch() {
   // Fetch episode titles + DD/MM/YYYY air dates from MAL episode page scraper,
   // and preload ALL TMDB episode thumbnails for the active 25-episode chunk before revealing them together
   useEffect(() => {
-    if (!anime) return;
+    if (!anime || isUpcomingAnime(anime)) return;
     let isCancelled = false;
 
     const pStart = episodeChunk * 25 + 1;
@@ -435,21 +436,26 @@ export default function Watch() {
 
   if (!anime) return null;
 
+  const isUpcoming = isUpcomingAnime(anime);
+  const upcomingAirDateText = isUpcoming ? getUpcomingAirDateText(anime) : null;
+
   // Same logic to get available episodes
-  let episodeCount = anime.episodes || 12;
-  if (anime.nextAiringEpisode) {
-    episodeCount = anime.nextAiringEpisode.episode - 1;
+  let episodeCount = isUpcoming ? 0 : (anime.episodes || 12);
+  if (!isUpcoming && anime.nextAiringEpisode) {
+    episodeCount = Math.max(0, anime.nextAiringEpisode.episode - 1);
   }
 
   const chunkSize = 25;
-  const totalChunks = Math.ceil(episodeCount / chunkSize);
+  const totalChunks = episodeCount > 0 ? Math.ceil(episodeCount / chunkSize) : 0;
   const chunks = Array.from({ length: totalChunks }, (_, i) => {
     const start = i * chunkSize + 1;
     const end = Math.min((i + 1) * chunkSize, episodeCount);
     return { index: i, label: `${start}-${end}` };
   });
 
-  let episodes = Array.from({ length: Math.max(1, episodeCount) }, (_, i) => i + 1);
+  let episodes = isUpcoming || episodeCount <= 0
+    ? []
+    : Array.from({ length: episodeCount }, (_, i) => i + 1);
   
   // Filter by chunk *before* sorting so the chunks are stable
   episodes = episodes.filter(ep => ep > episodeChunk * chunkSize && ep <= (episodeChunk + 1) * chunkSize);
@@ -1004,25 +1010,27 @@ export default function Watch() {
               Episodes
             </h2>
             
-            <div className="flex items-center gap-2 shrink-0">
-              <button 
-                onClick={() => setIsListView(!isListView)}
-                className="p-2 text-gray-400 hover:text-primary transition-all duration-200 active:scale-90 bg-white/[0.06] hover:bg-white/[0.12] rounded-lg border border-white/10"
-                title="Toggle View Mode"
-              >
-                {isListView ? <LayoutGrid size={15} /> : <ListIcon size={15} />}
-              </button>
-              <button 
-                onClick={() => setSortDesc(!sortDesc)}
-                className="p-2 text-gray-400 hover:text-primary transition-all duration-200 active:scale-90 bg-white/[0.06] hover:bg-white/[0.12] rounded-lg border border-white/10"
-                title="Sort Order"
-              >
-                <ArrowDownUp size={15} />
-              </button>
-            </div>
+            {!isUpcoming && episodes.length > 0 && (
+              <div className="flex items-center gap-2 shrink-0">
+                <button 
+                  onClick={() => setIsListView(!isListView)}
+                  className="p-2 text-gray-400 hover:text-primary transition-all duration-200 active:scale-90 bg-white/[0.06] hover:bg-white/[0.12] rounded-lg border border-white/10"
+                  title="Toggle View Mode"
+                >
+                  {isListView ? <LayoutGrid size={15} /> : <ListIcon size={15} />}
+                </button>
+                <button 
+                  onClick={() => setSortDesc(!sortDesc)}
+                  className="p-2 text-gray-400 hover:text-primary transition-all duration-200 active:scale-90 bg-white/[0.06] hover:bg-white/[0.12] rounded-lg border border-white/10"
+                  title="Sort Order"
+                >
+                  <ArrowDownUp size={15} />
+                </button>
+              </div>
+            )}
           </div>
           
-          {totalChunks > 1 && (
+          {!isUpcoming && totalChunks > 1 && (
             <div className="mb-4 relative" ref={dropdownRef}>
               <button
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -1065,6 +1073,19 @@ export default function Watch() {
           )}
           
           <div className="flex-1 min-h-0 bg-black/20 border border-white/5 rounded-xl p-2.5">
+            {isUpcoming || episodes.length === 0 ? (
+              <div className="flex flex-col items-center justify-center text-center py-10 px-4">
+                <div className="w-10 h-10 rounded-full bg-primary/15 border border-primary/25 flex items-center justify-center mb-2.5">
+                  <Calendar size={18} className="text-primary" />
+                </div>
+                <p className="text-sm font-bold text-[#FBF3E5]">Upcoming Anime</p>
+                {upcomingAirDateText ? (
+                  <p className="text-xs text-primary font-medium mt-1">{upcomingAirDateText}</p>
+                ) : (
+                  <p className="text-[11px] text-gray-400 mt-1">Episodes will appear here once it airs.</p>
+                )}
+              </div>
+            ) : (
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
                 key={`${isListView ? 'list' : 'grid'}-${episodeChunk}-${sortDesc ? 'desc' : 'asc'}`}
@@ -1215,6 +1236,7 @@ export default function Watch() {
           })}
               </motion.div>
             </AnimatePresence>
+            )}
           </div>
         </div>
       </div>

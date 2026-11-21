@@ -183,6 +183,9 @@ export const ANIME_DETAILS_QUERY = `
   query($id: Int) {
     Media(id: $id, type: ANIME) {
       ...MediaFragment
+      duration
+      season
+      seasonYear
       startDate { year month day }
       endDate { year month day }
       studios(isMain: true) { edges { isMain node { name } } }
