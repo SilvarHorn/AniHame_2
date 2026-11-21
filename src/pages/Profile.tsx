@@ -11,6 +11,7 @@ import { preloadAnimeThumbnails } from '../utils/imagePreload';
 import { MyListStatus, getMyList, MyListItem } from '../utils/myList';
 import SingleSelect from '../components/ui/SingleSelect';
 import { ServerOrderManager } from '../components/player/ServerOrderManager';
+import { PWAInstallButton } from '../components/pwa/PWAInstallButton';
 import { cn } from '../lib/utils';
 
 const TABS: { label: string; value: MyListStatus | 'ALL' }[] = [
@@ -885,6 +886,9 @@ export default function Profile() {
               </button>
             </div>
           </div>
+
+          {/* Standalone App Install Setting */}
+          <PWAInstallButton variant="settings" />
 
           {/* Server List Arrangement Section */}
           <div className="bg-gray-900/50 p-5 rounded-xl border border-white/5 mt-6">

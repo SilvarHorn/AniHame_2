@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import Navbar from './Navbar';
+import { OfflineIndicator } from '../pwa/OfflineIndicator';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [themeColor, setThemeColor] = useState('#FBF3E5');
@@ -91,6 +92,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <main className="pt-14 flex-1">
           {children}
         </main>
+        <OfflineIndicator />
       </div>
     </div>
   );
