@@ -19,7 +19,7 @@ interface ThumbCacheEntry {
 }
 
 const CACHE_TTL_MS = 1000 * 60 * 60 * 6; // 6 hours
-const SESSION_PREFIX = 'tmdb_ep_v2_';
+const SESSION_PREFIX = 'tmdb_ep_v3_';
 
 const thumbCache = new Map<string, ThumbCacheEntry>();
 const inflightRangeRequests = new Map<string, Promise<void>>();
@@ -27,7 +27,9 @@ const inflightRangeRequests = new Map<string, Promise<void>>();
 function isValidTmdbUrl(url: unknown): url is string {
   return (
     typeof url === 'string' &&
-    (url.startsWith('https://media.themoviedb.org/') || url.startsWith('https://image.tmdb.org/'))
+    (/^\/api\/tmdb\/image\?(?:src=(?:tmdb|tvdb)&)?path=%2F[A-Za-z0-9%._-]+$/i.test(url) ||
+      url.startsWith('https://media.themoviedb.org/') ||
+      url.startsWith('https://image.tmdb.org/'))
   );
 }
 

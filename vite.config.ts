@@ -84,6 +84,20 @@ export default defineConfig(() => {
               },
             },
             {
+              urlPattern: ({ url }) => url.pathname === '/api/tmdb/image',
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'proxied-tmdb-thumbnails-cache',
+                expiration: {
+                  maxEntries: 300,
+                  maxAgeSeconds: 60 * 60 * 24 * 7,
+                },
+                cacheableResponse: {
+                  statuses: [200],
+                },
+              },
+            },
+            {
               urlPattern: /^https:\/\/(media\.themoviedb\.org|image\.tmdb\.org|s4\.anilist\.co)\/.*/i,
               handler: 'CacheFirst',
               options: {
