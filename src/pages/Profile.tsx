@@ -6,22 +6,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import Cropper from 'react-easy-crop';
 import { useAuth, WatchServerType, TitleLanguage, DEFAULT_SERVER_ORDER, DEFAULT_CARD_BORDER } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import AnimeCard from '../components/ui/AnimeCard';
-import { preloadAnimeThumbnails } from '../utils/imagePreload';
-import { MyListStatus, getMyList, MyListItem } from '../utils/myList';
 import SingleSelect from '../components/ui/SingleSelect';
 import { ServerOrderManager } from '../components/player/ServerOrderManager';
 import { PWAInstallButton } from '../components/pwa/PWAInstallButton';
 import { cn } from '../lib/utils';
-
-const TABS: { label: string; value: MyListStatus | 'ALL' }[] = [
-  { label: 'All', value: 'ALL' },
-  { label: 'Watching', value: 'WATCHING' },
-  { label: 'Completed', value: 'COMPLETED' },
-  { label: 'On-Hold', value: 'ON_HOLD' },
-  { label: 'Dropped', value: 'DROPPED' },
-  { label: 'Plan to Watch', value: 'PLAN_TO_WATCH' }
-];
 
 export default function Profile() {
   const { profile, loading, updatePreferences, updateProfileData } = useAuth();
@@ -54,11 +42,6 @@ export default function Profile() {
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
-  // List states
-  const [activeTab, setActiveTab] = useState<MyListStatus | 'ALL'>('ALL');
-  const [myList, setMyList] = useState<MyListItem[]>([]);
-  const [page, setPage] = useState(1);
-  const itemsPerPage = 24;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bgFileInputRef = useRef<HTMLInputElement>(null);
   const [isEditingOpacity, setIsEditingOpacity] = useState(false);
@@ -112,17 +95,6 @@ export default function Profile() {
       } catch (e) {}
     }
   }, [profile]);
-
-  useEffect(() => {
-    setMyList(getMyList());
-    const handleListUpdate = () => setMyList(getMyList());
-    window.addEventListener('my-list-updated', handleListUpdate);
-    return () => window.removeEventListener('my-list-updated', handleListUpdate);
-  }, []);
-
-  useEffect(() => {
-    setPage(1);
-  }, [activeTab]);
 
       const updateGradient = (t: string, d: string, c1: string, c2: string) => {
     setGradType(t);
@@ -378,25 +350,6 @@ export default function Profile() {
   if (loading) {
     return <div className="flex justify-center items-center h-full min-h-[50vh]"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div></div>;
   }
-
-  const filteredList = activeTab === 'ALL' ? myList : myList.filter(i => i.status === activeTab);
-  const totalPages = Math.ceil(filteredList.length / itemsPerPage);
-  const paginatedList = filteredList.slice((page - 1) * itemsPerPage, page * itemsPerPage);
-
-  const [batchReady, setBatchReady] = useState(false);
-
-  useEffect(() => {
-    let isCurrent = true;
-    setBatchReady(false);
-    if (paginatedList.length === 0) {
-      setBatchReady(true);
-      return;
-    }
-    preloadAnimeThumbnails(paginatedList).then(() => {
-      if (isCurrent) setBatchReady(true);
-    });
-    return () => { isCurrent = false; };
-  }, [paginatedList]);
 
   return (
     <div className="w-full p-4 sm:p-6 lg:p-8">
@@ -1123,108 +1076,8 @@ export default function Profile() {
             )}
             </AnimatePresence>
           </div>
+      {/* Profile & Settings Section */}
         </div>
-      </div>
-
-      {/* List Section */}
-      <div>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
-          <h2 className="text-2xl font-bold text-[#FBF3E5] flex items-center gap-3">
-            <span className="w-1.5 h-6 bg-primary rounded-full inline-block"></span>
-            My List
-          </h2>
-          <span className="bg-gray-800 text-gray-300 px-3 py-1 rounded-full text-sm font-bold border border-white/5 whitespace-nowrap">
-            {filteredList.length} Anime
-          </span>
-        </div>
-        
-        <div className="flex overflow-x-auto gap-2 pb-4 mb-4 custom-scrollbar">
-          {TABS.map(tab => {
-            const isActive = activeTab === tab.value;
-            return (
-              <button
-                key={tab.value}
-                onClick={() => setActiveTab(tab.value)}
-                className={cn(
-                  "relative whitespace-nowrap px-4 py-2 rounded-lg text-sm font-bold transition-colors duration-200 active:scale-95",
-                  isActive 
-                    ? 'text-[#0B0C0F]' 
-                    : 'bg-[#151F2E] text-gray-400 hover:text-[#FBF3E5] border border-gray-800'
-                )}
-              >
-                {isActive && (
-                  <motion.span
-                    layoutId="profile-list-tab"
-                    transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                    className="absolute inset-0 rounded-lg bg-primary"
-                  />
-                )}
-                <span className="relative z-10">{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        <AnimatePresence mode="wait">
-          {paginatedList.length > 0 ? (
-            <motion.div
-              key={`${activeTab}-${page}`}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-            >
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8 gap-4 md:gap-6">
-                {paginatedList.map((item, idx) => (
-                  <AnimeCard 
-                    key={item.animeId} 
-                    anime={item.anime as any} 
-                    index={idx}
-                    batchReady={batchReady}
-                  />
-                ))}
-              </div>
-              {totalPages > 1 && (
-                <div className="flex justify-center items-center gap-4 mt-12">
-                  <button
-                    onClick={() => setPage(p => Math.max(1, p - 1))}
-                    disabled={page === 1}
-                    className="px-4 py-2 bg-[#151F2E] text-white rounded-lg disabled:opacity-50 hover:bg-gray-800 active:scale-95 transition-all font-bold text-sm"
-                  >
-                    Previous
-                  </button>
-                  <span className="text-gray-400 font-medium">Page {page} of {totalPages}</span>
-                  <button
-                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                    disabled={page === totalPages}
-                    className="px-4 py-2 bg-[#151F2E] text-white rounded-lg disabled:opacity-50 hover:bg-gray-800 active:scale-95 transition-all font-bold text-sm"
-                  >
-                    Next
-                  </button>
-                </div>
-              )}
-            </motion.div>
-          ) : (
-            <motion.div
-              key={`empty-${activeTab}`}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-              className="text-center py-20 bg-[#151F2E] rounded-2xl border border-gray-800 border-dashed"
-            >
-              {localAvatar ? (
-                <img src={localAvatar} alt="Profile" className="w-16 h-16 rounded-full object-cover mx-auto mb-4 border-2 border-gray-800" />
-              ) : (
-                <div className="bg-gray-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <User size={24} className="text-gray-400" />
-                </div>
-              )}
-              <h3 className="text-lg font-bold text-[#FBF3E5] mb-2">No anime found</h3>
-              <p className="text-gray-400">Add anime to your "{TABS.find(t => t.value === activeTab)?.label}" list to see them here.</p>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
     </div>
   );

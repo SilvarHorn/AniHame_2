@@ -135,7 +135,7 @@ export default function Navbar() {
                   { path: '/explore', label: 'Explore' },
                   { path: '/trending', label: 'Trending' },
                   { path: '/random', label: 'Random' },
-                  { path: '/profile', label: 'My List' },
+                  { path: '/my-list', label: 'My List' },
                   { path: '/schedule', label: 'Schedule' },
                 ].map((item) => {
                   const active = isNavActive(item.path);
@@ -219,16 +219,33 @@ export default function Navbar() {
               </button>
             )}
             <Link 
-              to="/profile"
+              to="/settings"
               id="profile-nav-btn"
+              title="Settings"
               className="flex items-center gap-3 ml-1 group"
             >
               {displayAvatar ? (
-                <img src={displayAvatar} alt="Profile" className="w-8 h-8 rounded-full object-cover border-2 border-gray-800 group-hover:border-primary transition-colors" />
+                <img
+                  src={displayAvatar}
+                  alt="Settings"
+                  className={`w-8 h-8 rounded-full object-cover border-2 transition-colors ${
+                    location.pathname.startsWith('/settings') || location.pathname.startsWith('/profile')
+                      ? 'border-primary'
+                      : 'border-gray-800 group-hover:border-primary'
+                  }`}
+                />
               ) : (
                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center text-[10px] font-bold text-[#0B0C0F]">ME</div>
               )}
-              <span className="text-xs font-semibold text-[#FBF3E5] group-hover:text-primary transition-colors truncate max-w-[100px]">{displayUsername}</span>
+              <span
+                className={`text-xs font-semibold transition-colors truncate max-w-[100px] ${
+                  location.pathname.startsWith('/settings') || location.pathname.startsWith('/profile')
+                    ? 'text-primary'
+                    : 'text-[#FBF3E5] group-hover:text-primary'
+                }`}
+              >
+                {displayUsername}
+              </span>
             </Link>
           </div>
 
@@ -247,12 +264,13 @@ export default function Navbar() {
             )}
             {isNHentai && (
               <Link 
-                to="/profile"
+                to="/settings"
                 id="profile-nav-btn-mobile-nhentai"
+                title="Settings"
                 className="flex items-center gap-2 group p-1"
               >
                 {displayAvatar ? (
-                  <img src={displayAvatar} alt="Profile" className="w-7 h-7 rounded-full object-cover border-2 border-gray-800 group-hover:border-primary transition-colors" />
+                  <img src={displayAvatar} alt="Settings" className="w-7 h-7 rounded-full object-cover border-2 border-gray-800 group-hover:border-primary transition-colors" />
                 ) : (
                   <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center text-[9px] font-bold text-[#0B0C0F]">ME</div>
                 )}
@@ -306,7 +324,7 @@ export default function Navbar() {
               >
                 Random
               </Link>
-              <Link to="/profile" onClick={() => setIsMobileMenuOpen(false)} className={getMobileNavClass('/profile')}>My List</Link>
+              <Link to="/my-list" onClick={() => setIsMobileMenuOpen(false)} className={getMobileNavClass('/my-list')}>My List</Link>
               <Link to="/schedule" onClick={() => setIsMobileMenuOpen(false)} className={getMobileNavClass('/schedule')}>Schedule</Link>
             </div>
             <div className="relative mb-2">
@@ -359,12 +377,12 @@ export default function Navbar() {
               </button>
             )}
             <Link 
-              to="/profile"
+              to="/settings"
               onClick={() => setIsMobileMenuOpen(false)}
               className="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-full text-sm font-medium transition-all active:scale-95 border border-gray-700"
             >
               {displayAvatar ? (
-                <img src={displayAvatar} alt="Profile" className="w-6 h-6 rounded-full object-cover" />
+                <img src={displayAvatar} alt="Settings" className="w-6 h-6 rounded-full object-cover" />
               ) : (
                 <User size={16} />
               )}

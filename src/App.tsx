@@ -13,6 +13,7 @@ const Random = lazy(() => import('./pages/Random'));
 const AnimeDetails = lazy(() => import('./pages/AnimeDetails'));
 const Watch = lazy(() => import('./pages/Watch'));
 const Profile = lazy(() => import('./pages/Profile'));
+const MyList = lazy(() => import('./pages/MyList'));
 const Schedule = lazy(() => import('./pages/Schedule'));
 const ContinueWatching = lazy(() => import('./pages/ContinueWatching'));
 
@@ -82,6 +83,8 @@ function AnimatedRoutes() {
         <Route path="/random" element={<Suspense fallback={<PageLoader />}><PageWrapper><Random /></PageWrapper></Suspense>} />
         <Route path="/anime/:id" element={<Suspense fallback={<PageLoader />}><PageWrapper><AnimeDetails /></PageWrapper></Suspense>} />
         <Route path="/watch/:id/:ep" element={<Suspense fallback={<PageLoader />}><PageWrapper><Watch /></PageWrapper></Suspense>} />
+        <Route path="/my-list" element={<Suspense fallback={<PageLoader />}><PageWrapper><MyList /></PageWrapper></Suspense>} />
+        <Route path="/settings" element={<Suspense fallback={<PageLoader />}><PageWrapper><Profile /></PageWrapper></Suspense>} />
         <Route path="/profile" element={<Suspense fallback={<PageLoader />}><PageWrapper><Profile /></PageWrapper></Suspense>} />
         <Route path="/schedule" element={<Suspense fallback={<PageLoader />}><PageWrapper><Schedule /></PageWrapper></Suspense>} />
         <Route path="/continue-watching" element={<Suspense fallback={<PageLoader />}><PageWrapper><ContinueWatching /></PageWrapper></Suspense>} />
@@ -98,6 +101,7 @@ function MainApp() {
       <>
         <DevToolsGuard />
         <Routes>
+          <Route path="/settings" element={<Layout><Suspense fallback={<PageLoader />}><PageWrapper><Profile /></PageWrapper></Suspense></Layout>} />
           <Route path="/profile" element={<Layout><Suspense fallback={<PageLoader />}><PageWrapper><Profile /></PageWrapper></Suspense></Layout>} />
           <Route path="*" element={<Layout><NHentaiApp /></Layout>} />
         </Routes>

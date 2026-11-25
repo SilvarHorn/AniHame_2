@@ -2,8 +2,8 @@ import React, { useEffect, useState, useRef } from "react";
 import { useParams, Link } from 'react-router-dom';
 import { fetchAnilist, ANIME_DETAILS_QUERY, isHanimeMode } from '../api/anilist';
 import { AnimeMedia } from '../types';
-import { saveProgress } from '../store/progress';
-import { ChevronLeft, ChevronRight, ChevronDown, ArrowDownUp, LayoutGrid, List as ListIcon, PlayCircle, ExternalLink, SlidersHorizontal, Server, Calendar } from 'lucide-react';
+import { saveProgress, getProgressForAnime } from '../store/progress';
+import { ChevronLeft, ChevronRight, ChevronDown, ArrowDownUp, LayoutGrid, List as ListIcon, PlayCircle, Play, ExternalLink, SlidersHorizontal, Server, Calendar } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { useAuth, WatchServerType, DEFAULT_SERVER_ORDER, sanitizeServerOrder, getPreferredAnimeTitle, getPreferredEpisodeTitle } from '../contexts/AuthContext';
@@ -14,6 +14,7 @@ import { tmdbClient, TmdbEpisodeThumb } from '../api/tmdb';
 import { malClient, MalScrapedEpisode } from '../api/mal';
 import { preloadImageUrls } from '../utils/imagePreload';
 import { isUpcomingAnime, getUpcomingAirDateText } from '../utils/upcoming';
+import { getAnimeListItem, getWatchedEpisodes, markEpisodeWatched, isEpisodeGrayedOut, MyListItem } from '../utils/myList';
 import { appLog } from '../lib/logger';
 
 const SERIES_SERVER_SESSION_KEY = 'anihame_series_server';
@@ -82,6 +83,10 @@ export default function Watch() {
   const [thumbsReady, setThumbsReady] = useState(false);
   const loadedThumbRangeRef = useRef<string>('');
   const [watchedEpisodes, setWatchedEpisodes] = useState<number[]>([]);
+  const [listItem, setListItem] = useState<MyListItem | null>(null);
+  const [inContinueWatching, setInContinueWatching] = useState(false);
+  const [isPlayerStarted, setIsPlayerStarted] = useState(false);
+  const [autoPlayCountdown, setAutoPlayCountdown] = useState(10);
   const [malTitle, setMalTitle] = useState<string | null>(null);
   const [zhenTubeUrl, setZhenTubeUrl] = useState<string | null>(null);
   const [isInIframe, setIsInIframe] = useState(false);
@@ -132,6 +137,7 @@ export default function Watch() {
   }, [profile?.preferences?.defaultAudio]);
 
   const handleSelectServer = (chosenServer: WatchServerType) => {
+    const serverChanged = chosenServer !== serverType;
     manualServerChoiceRef.current = chosenServer;
     if (animeId) {
       saveSeriesServer(animeId, chosenServer);
@@ -140,6 +146,9 @@ export default function Watch() {
       setVidcUseMal(false);
     }
     setServerType(chosenServer);
+    if (serverChanged) {
+      setIsPlayerStarted(true);
+    }
   };
 
   const serverOrder: WatchServerType[] = React.useMemo(() => {
@@ -193,15 +202,31 @@ export default function Watch() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Sync watched episodes, list status, and Continue Watching membership
+  useEffect(() => {
+    if (!animeId) return;
+    const syncState = () => {
+      setWatchedEpisodes(getWatchedEpisodes(animeId));
+      setListItem(getAnimeListItem(animeId));
+      setInContinueWatching(Boolean(getProgressForAnime(animeId)));
+    };
+    syncState();
+    window.addEventListener('my-list-updated', syncState);
+    window.addEventListener('watched-episodes-updated', syncState);
+    window.addEventListener('progress-updated', syncState);
+    return () => {
+      window.removeEventListener('my-list-updated', syncState);
+      window.removeEventListener('watched-episodes-updated', syncState);
+      window.removeEventListener('progress-updated', syncState);
+    };
+  }, [animeId]);
+
+  // Reset player poster preview & 10s auto-play countdown whenever episode or anime changes
   useEffect(() => {
     if (currentEp) {
       setEpisodeChunk(Math.floor((currentEp - 1) / 25));
-      const watchedKey = `watched_eps_${animeId}`;
-      const watchedSet = new Set<number>(JSON.parse(localStorage.getItem(watchedKey) || '[]'));
-      watchedSet.add(currentEp);
-      const arr = Array.from(watchedSet);
-      localStorage.setItem(watchedKey, JSON.stringify(arr));
-      setWatchedEpisodes(arr);
+      setIsPlayerStarted(false);
+      setAutoPlayCountdown(10);
     }
   }, [currentEp, animeId]);
 
@@ -276,9 +301,40 @@ export default function Watch() {
     };
   }, [animeId]);
 
-  // Save watch progress whenever anime or current episode changes
+  const hasPlayableStream = Boolean(
+    anime &&
+    anime.id === animeId &&
+    !isUpcomingAnime(anime) &&
+    !(serverType === 'mal' && !anime.idMal) &&
+    !(serverType === 'vidsrc' && !imdbId) &&
+    !(serverType === 'zhentube' && !zhenTubeUrl)
+  );
+
+  // Automatically start video playback after 10 seconds if the user hasn't clicked Play or switched servers
   useEffect(() => {
-    if (anime && anime.id === animeId && currentEp) {
+    if (isPlayerStarted || !hasPlayableStream) return;
+
+    const timer = window.setInterval(() => {
+      setAutoPlayCountdown((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [isPlayerStarted, hasPlayableStream, animeId, currentEp]);
+
+  useEffect(() => {
+    if (!isPlayerStarted && hasPlayableStream && autoPlayCountdown === 0) {
+      setIsPlayerStarted(true);
+    }
+  }, [isPlayerStarted, hasPlayableStream, autoPlayCountdown]);
+
+  // When an episode actually starts playing:
+  // 1. Mark ONLY this episode as watched (never previous episodes)
+  // 2. Add/update Continue Watching (never automatically add to the Watching list)
+  useEffect(() => {
+    if (isPlayerStarted && hasPlayableStream && anime && currentEp) {
+      const updated = markEpisodeWatched(anime.id, currentEp);
+      setWatchedEpisodes(updated);
+
       const lang = profile?.preferences?.titleLanguage || 'english';
       saveProgress({
         animeId: anime.id,
@@ -288,7 +344,7 @@ export default function Watch() {
         timestamp: Date.now()
       });
     }
-  }, [anime, animeId, currentEp, profile?.preferences?.titleLanguage]);
+  }, [isPlayerStarted, hasPlayableStream, anime, animeId, currentEp, profile?.preferences?.titleLanguage]);
 
   // Fetch episode titles + DD/MM/YYYY air dates from MAL episode page scraper,
   // and preload ALL TMDB episode thumbnails for the active 25-episode chunk before revealing them together
@@ -601,6 +657,9 @@ export default function Watch() {
   }
 
   const currentEpRuntime = episodeRuntimeMap.get(currentEp) || defaultEpisodeRuntime;
+  const currentEpFallbackThumb = anime.bannerImage || anime.coverImage.extraLarge || anime.coverImage.large;
+  const currentEpThumbSrc = episodeThumbMap.get(currentEp) || currentEpFallbackThumb;
+  const currentEpTitle = episodeTitleMap.get(currentEp) || `Episode ${currentEp}`;
 
   return (
     <div className="w-full p-4 sm:p-6 lg:p-8 flex flex-col min-h-[calc(100vh-3.5rem)] pb-12">
@@ -652,8 +711,78 @@ export default function Watch() {
         <div className="w-full flex-1 flex flex-col gap-3.5 min-w-0">
           <div className="w-full bg-black rounded-xl overflow-hidden shadow-2xl shadow-black/50 border border-white/5 flex flex-col aspect-video shrink-0">
             <div className="w-full h-full relative">
-              {iframeUrl ? (
-                serverType === 'mal' ? (
+              {isUpcoming ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-[#0B0C0F]">
+                  <div className="w-12 h-12 rounded-full bg-primary/15 border border-primary/25 flex items-center justify-center mb-3">
+                    <Calendar size={22} className="text-primary" />
+                  </div>
+                  <h3 className="text-base font-bold text-[#FBF3E5]">Upcoming Anime</h3>
+                  {upcomingAirDateText ? (
+                    <p className="text-xs sm:text-sm text-primary font-medium mt-1.5">{upcomingAirDateText}</p>
+                  ) : (
+                    <p className="text-gray-400 text-xs sm:text-sm mt-1.5">This anime has not aired yet.</p>
+                  )}
+                </div>
+              ) : iframeUrl ? (
+                !isPlayerStarted ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsPlayerStarted(true)}
+                    className="group absolute inset-0 w-full h-full overflow-hidden bg-[#0B0C0F] text-left cursor-pointer focus:outline-none"
+                    aria-label={`Play ${displayAnimeTitle} Episode ${currentEp}`}
+                  >
+                    {thumbsReady || episodeThumbMap.has(currentEp) ? (
+                      <motion.img
+                        key={`poster-${anime.id}-${currentEp}-${currentEpThumbSrc}`}
+                        initial={{ opacity: 0, scale: 1.03 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+                        src={currentEpThumbSrc}
+                        alt={`${displayAnimeTitle} Episode ${currentEp}`}
+                        referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          if (currentEpFallbackThumb && e.currentTarget.src !== currentEpFallbackThumb) {
+                            e.currentTarget.src = currentEpFallbackThumb;
+                          }
+                        }}
+                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 w-full h-full bg-gray-900 animate-pulse" />
+                    )}
+
+                    {/* Vignette gradient for legible button and episode details */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#0B0C0F]/90 via-black/35 to-[#0B0C0F]/45 group-hover:via-black/25 transition-colors duration-300" />
+
+                    {/* Center Play Button */}
+                    <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
+                      <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-primary text-[#0B0C0F] flex items-center justify-center shadow-[0_0_35px_rgba(251,243,229,0.45)] transition-transform duration-300 group-hover:scale-110 group-active:scale-95">
+                        <Play size={32} fill="currentColor" className="ml-1" />
+                      </div>
+                    </div>
+
+                    {/* Bottom Episode Info Bar */}
+                    <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5 flex items-end justify-between gap-4 pointer-events-none">
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-bold uppercase tracking-wider text-primary">
+                          Episode {currentEp}
+                          {currentEpRuntime && <span className="text-gray-300 ml-2 font-semibold">{currentEpRuntime}</span>}
+                        </div>
+                        <div className="text-sm sm:text-base font-bold text-[#FBF3E5] truncate mt-0.5 drop-shadow">
+                          {currentEpTitle}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 10-second Auto-play Progress Bar */}
+                    <div className="absolute inset-x-0 bottom-0 h-1 bg-white/15">
+                      <div
+                        className="h-full bg-primary transition-[width] duration-1000 ease-linear"
+                        style={{ width: `${Math.min(100, Math.max(0, ((10 - autoPlayCountdown) / 10) * 100))}%` }}
+                      />
+                    </div>
+                  </button>
+                ) : serverType === 'mal' ? (
                   <iframe 
                     key={`mal-${currentEp}-${audioType}`}
                     src={iframeUrl}
@@ -948,7 +1077,10 @@ export default function Watch() {
                 <div className="flex items-center bg-black/40 rounded-xl p-1 border border-white/5 gap-1">
                   <button
                     type="button"
-                    onClick={() => setVidcUseMal(false)}
+                    onClick={() => {
+                      if (vidcUseMal) setIsPlayerStarted(true);
+                      setVidcUseMal(false);
+                    }}
                     className={cn(
                       "px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all",
                       !vidcUseMal ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
@@ -959,7 +1091,10 @@ export default function Watch() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setVidcUseMal(true)}
+                    onClick={() => {
+                      if (!vidcUseMal) setIsPlayerStarted(true);
+                      setVidcUseMal(true);
+                    }}
                     className={cn(
                       "px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all",
                       vidcUseMal ? "bg-primary text-[#0B0C0F] shadow-sm" : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]"
@@ -1100,7 +1235,7 @@ export default function Watch() {
                 )}
               >
           {episodes.map(epNum => {
-            const isWatched = watchedEpisodes.includes(epNum) && epNum !== currentEp;
+            const isWatched = isEpisodeGrayedOut(epNum, listItem, watchedEpisodes, inContinueWatching) && epNum !== currentEp;
             const fallbackThumb = anime.bannerImage || anime.coverImage.extraLarge || anime.coverImage.large;
             const thumbSrc = episodeThumbMap.get(epNum) || fallbackThumb;
             const epRuntime = episodeRuntimeMap.get(epNum) || defaultEpisodeRuntime;

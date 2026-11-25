@@ -3,11 +3,21 @@ import { useParams, Link } from 'react-router-dom';
 import { fetchAnilist, ANIME_DETAILS_QUERY, isHanimeMode } from '../api/anilist';
 import { AnimeMedia } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, Star, Calendar, Info, ExternalLink, ArrowDownUp, LayoutGrid, List as ListIcon, PlayCircle, MonitorPlay, ChevronDown } from 'lucide-react';
+import { Play, Star, Calendar, Info, ExternalLink, ArrowDownUp, LayoutGrid, List as ListIcon, PlayCircle, MonitorPlay, ChevronDown, Minus, Plus } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { MarqueeText } from '../components/MarqueeText';
 import { AnimeInfo } from '../components/ui/AnimeInfo';
-import { getAnimeListStatus, addOrUpdateToList, removeFromList, MyListStatus } from '../utils/myList';
+import {
+  getAnimeListItem,
+  addOrUpdateToList,
+  updateListEpisodesWatched,
+  removeFromList,
+  getWatchedEpisodes,
+  isEpisodeGrayedOut,
+  MyListItem,
+  MyListStatus
+} from '../utils/myList';
+import { getProgressForAnime } from '../store/progress';
 import { useAuth, getPreferredAnimeTitle, getPreferredEpisodeTitle } from '../contexts/AuthContext';
 import AnimeCard from '../components/ui/AnimeCard';
 import { preloadAnimeThumbnails, preloadImageUrls } from '../utils/imagePreload';
@@ -99,7 +109,8 @@ export default function AnimeDetails() {
   
   const [sortDesc, setSortDesc] = useState(false);
   const [isListView, setIsListView] = useState(false);
-  const [listStatus, setListStatus] = useState<MyListStatus | null>(null);
+  const [listItem, setListItem] = useState<MyListItem | null>(null);
+  const listStatus: MyListStatus | null = listItem?.status ?? null;
   const [imdbId, setImdbId] = useState<string | null>(null);
   const [showEpisodes, setShowEpisodes] = useState(false);
   const [malId, setMalId] = useState<number | null>(null);
@@ -110,10 +121,32 @@ export default function AnimeDetails() {
   const [episodeRange, setEpisodeRange] = useState('');
   const [fillerEpisodes, setFillerEpisodes] = useState<number[]>([]);
   const [watchedEpisodes, setWatchedEpisodes] = useState<number[]>([]);
+  const [continueWatchingEp, setContinueWatchingEp] = useState<number | null>(null);
+  const inContinueWatching = continueWatchingEp !== null;
   const [malTitle, setMalTitle] = useState<string | null>(null);
   const [malScore, setMalScore] = useState<number | null>(null);
   const [kitsuScore, setKitsuScore] = useState<number | null>(null);
   const [ageRating, setAgeRating] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!id) return;
+    const numericId = Number(id);
+    const syncWatchedAndList = () => {
+      setWatchedEpisodes(getWatchedEpisodes(numericId));
+      setListItem(getAnimeListItem(numericId));
+      const progress = getProgressForAnime(numericId);
+      setContinueWatchingEp(progress?.lastEpisodeWatched && progress.lastEpisodeWatched > 0 ? progress.lastEpisodeWatched : null);
+    };
+    syncWatchedAndList();
+    window.addEventListener('my-list-updated', syncWatchedAndList);
+    window.addEventListener('watched-episodes-updated', syncWatchedAndList);
+    window.addEventListener('progress-updated', syncWatchedAndList);
+    return () => {
+      window.removeEventListener('my-list-updated', syncWatchedAndList);
+      window.removeEventListener('watched-episodes-updated', syncWatchedAndList);
+      window.removeEventListener('progress-updated', syncWatchedAndList);
+    };
+  }, [id]);
 
   useEffect(() => {
     if (!id) return;
@@ -135,8 +168,7 @@ export default function AnimeDetails() {
         const data = await fetchAnilist(ANIME_DETAILS_QUERY, { id: Number(id) });
         if (isCancelled) return;
         
-        const watchedKey = `watched_eps_${id}`;
-        setWatchedEpisodes(JSON.parse(localStorage.getItem(watchedKey) || '[]'));
+        setWatchedEpisodes(getWatchedEpisodes(Number(id)));
 
         if (data?.Media) {
           if (data.Media.isAdult && !isHanimeMode()) {
@@ -144,7 +176,7 @@ export default function AnimeDetails() {
             return;
           }
           setAnime(data.Media);
-          setListStatus(getAnimeListStatus(Number(id)));
+          setListItem(getAnimeListItem(Number(id)));
           
           let epCount = data.Media.episodes || 12;
           if (data.Media.nextAiringEpisode) {
@@ -317,13 +349,22 @@ export default function AnimeDetails() {
     const val = e.target.value;
     if (val === '') {
       removeFromList(Number(id));
-      setListStatus(null);
+      setListItem(null);
     } else if (anime) {
       const status = val as MyListStatus;
-      addOrUpdateToList(anime, status);
-      setListStatus(status);
-      window.dispatchEvent(new Event('my-list-updated'));
+      const updated = addOrUpdateToList(anime, status);
+      setListItem(updated);
     }
+  };
+
+  const handleEpisodesWatchedChange = (nextCount: number, maxEpisodes: number) => {
+    if (!anime) return;
+    const clamped = Math.max(0, Math.min(maxEpisodes, Math.floor(Number(nextCount) || 0)));
+    const updated = updateListEpisodesWatched(anime.id, clamped);
+    if (updated) {
+      setListItem(updated);
+    }
+    setWatchedEpisodes(getWatchedEpisodes(anime.id));
   };
 
   const relatedAnimeList = React.useMemo(() => anime ? getRelatedAnime(anime) : [], [anime]);
@@ -490,32 +531,119 @@ export default function AnimeDetails() {
                 <Calendar size={18} className="text-primary shrink-0" />
                 <span>Upcoming Anime</span>
               </div>
-            ) : (
-              <Link 
-                to={`/watch/${anime.id}/1`}
-                className="w-full bg-primary hover:bg-primary-hover text-[#0B0C0F] font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 hover:-translate-y-0.5 active:scale-95 shadow-lg mb-3"
-              >
-                <Play size={20} fill="currentColor" />
-                Watch Episode 1
-              </Link>
-            )}
+            ) : (() => {
+              const maxEp = Math.max(1, episodeCount);
+              const watchingNextEp =
+                listStatus === 'WATCHING' && (listItem?.episodesWatched ?? 0) > 0
+                  ? Math.min(maxEp, (listItem!.episodesWatched!) + 1)
+                  : 0;
+              const rawResumeEp = Math.max(continueWatchingEp ?? 0, watchingNextEp);
+              const resumeEp = rawResumeEp > 0 ? Math.min(maxEp, rawResumeEp) : null;
+              return (
+                <Link 
+                  to={`/watch/${anime.id}/${resumeEp ?? 1}`}
+                  className="w-full bg-primary hover:bg-primary-hover text-[#0B0C0F] font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 hover:-translate-y-0.5 active:scale-95 shadow-lg mb-3 text-sm sm:text-base text-center"
+                >
+                  <Play size={18} fill="currentColor" className="shrink-0" />
+                  <span>{resumeEp ? `Continue Watching Ep ${resumeEp}` : 'Watch Episode 1'}</span>
+                </Link>
+              );
+            })()}
             
-            <div className="relative mb-4">
-              <select
-                value={listStatus || ''}
-                onChange={handleListStatusChange}
-                className="w-full appearance-none bg-gray-800 border border-white/10 hover:border-primary/50 text-gray-200 font-bold py-3 px-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary transition-all text-center cursor-pointer"
-              >
-                <option value="">+ Add to My List</option>
-                <option value="WATCHING">Watching</option>
-                <option value="COMPLETED">Completed</option>
-                <option value="ON_HOLD">On-Hold</option>
-                <option value="DROPPED">Dropped</option>
-                <option value="PLAN_TO_WATCH">Plan to Watch</option>
-              </select>
-              <div className="pointer-events-none absolute inset-y-0 right-4 flex items-center px-2 text-gray-400">
-                ▼
+            <div className="mb-4 flex flex-col gap-2.5">
+              <div className="relative">
+                <select
+                  value={listStatus || ''}
+                  onChange={handleListStatusChange}
+                  className="w-full appearance-none bg-gray-800 border border-white/10 hover:border-primary/50 text-gray-200 font-bold py-3 px-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary transition-all text-center cursor-pointer"
+                >
+                  <option value="">+ Add to My List</option>
+                  <option value="WATCHING">Watching</option>
+                  <option value="COMPLETED">Completed</option>
+                  <option value="ON_HOLD">On-Hold</option>
+                  <option value="DROPPED">Dropped</option>
+                  <option value="PLAN_TO_WATCH">Plan to Watch</option>
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-4 flex items-center px-2 text-gray-400">
+                  ▼
+                </div>
               </div>
+
+              <AnimatePresence initial={false}>
+                {listStatus === 'WATCHING' && !isUpcoming && episodeCount > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0, y: -4 }}
+                    animate={{ opacity: 1, height: 'auto', y: 0 }}
+                    exit={{ opacity: 0, height: 0, y: -4 }}
+                    transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                    className="overflow-hidden"
+                  >
+                    <div className="bg-gray-900/80 border border-white/10 rounded-xl p-3 flex flex-col gap-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-400 font-semibold">Episodes Watched</span>
+                        <span className="text-primary font-bold">
+                          {Math.min(episodeCount, listItem?.episodesWatched ?? 0)} / {episodeCount}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleEpisodesWatchedChange((listItem?.episodesWatched ?? 0) - 1, episodeCount)
+                          }
+                          disabled={(listItem?.episodesWatched ?? 0) <= 0}
+                          className="h-9 w-9 shrink-0 rounded-lg bg-gray-800 hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed text-gray-200 border border-white/10 flex items-center justify-center transition-all active:scale-95"
+                          title="Decrease episodes watched"
+                        >
+                          <Minus size={14} />
+                        </button>
+                        {episodeCount <= 500 ? (
+                          <div className="relative flex-1 min-w-0">
+                            <select
+                              aria-label="Episodes watched"
+                              value={Math.min(episodeCount, listItem?.episodesWatched ?? 0)}
+                              onChange={(e) => handleEpisodesWatchedChange(Number(e.target.value), episodeCount)}
+                              className="w-full h-9 appearance-none bg-gray-800 border border-white/10 hover:border-primary/50 text-gray-200 text-xs font-bold rounded-lg pl-2.5 pr-7 focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                            >
+                              <option value={0}>0 (Not started)</option>
+                              {Array.from({ length: episodeCount }, (_, i) => i + 1).map((n) => (
+                                <option key={n} value={n}>
+                                  Ep {n}
+                                </option>
+                              ))}
+                            </select>
+                            <ChevronDown
+                              size={13}
+                              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400"
+                            />
+                          </div>
+                        ) : (
+                          <input
+                            type="number"
+                            aria-label="Episodes watched"
+                            min={0}
+                            max={episodeCount}
+                            value={Math.min(episodeCount, listItem?.episodesWatched ?? 0)}
+                            onChange={(e) => handleEpisodesWatchedChange(Number(e.target.value), episodeCount)}
+                            className="flex-1 min-w-0 h-9 bg-gray-800 border border-white/10 focus:border-primary text-gray-200 text-xs font-bold text-center rounded-lg px-2 focus:outline-none"
+                          />
+                        )}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleEpisodesWatchedChange((listItem?.episodesWatched ?? 0) + 1, episodeCount)
+                          }
+                          disabled={(listItem?.episodesWatched ?? 0) >= episodeCount}
+                          className="h-9 w-9 shrink-0 rounded-lg bg-gray-800 hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed text-gray-200 border border-white/10 flex items-center justify-center transition-all active:scale-95"
+                          title="Increase episodes watched"
+                        >
+                          <Plus size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             <div className="flex flex-col gap-2">
@@ -640,7 +768,7 @@ export default function AnimeDetails() {
                   >
                     {episodes.map(ep => {
                       const isFiller = fillerEpisodes.includes(ep);
-                      const isWatched = watchedEpisodes.includes(ep);
+                      const isWatched = isEpisodeGrayedOut(ep, listItem, watchedEpisodes, inContinueWatching);
                       const fallbackThumb = anime.bannerImage || anime.coverImage.extraLarge || anime.coverImage.large;
                       const thumbSrc = episodeThumbMap.get(ep) || fallbackThumb;
                       const epRuntime = episodeRuntimeMap.get(ep) || defaultEpisodeRuntime;

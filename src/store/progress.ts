@@ -1,5 +1,6 @@
 import { WatchProgress } from '../types';
 import { isHanimeMode } from '../api/anilist';
+import { getAnimeListStatus, clearWatchedEpisodes } from '../utils/myList';
 
 const getProgressKey = () => isHanimeMode() ? 'hanime_progress' : 'anime_progress';
 
@@ -25,12 +26,19 @@ export const saveProgress = (progress: WatchProgress) => {
   // Keep only the most recent 50 instead of 10 to allow a dedicated page
   const updated = current.sort((a, b) => b.timestamp - a.timestamp).slice(0, 50);
   localStorage.setItem(getProgressKey(), JSON.stringify(updated));
+  window.dispatchEvent(new CustomEvent('progress-updated', { detail: { animeId: progress.animeId } }));
 };
 
 export const removeProgress = (animeId: number) => {
   const current = getProgress();
   const updated = current.filter(p => p.animeId !== animeId);
   localStorage.setItem(getProgressKey(), JSON.stringify(updated));
+  window.dispatchEvent(new CustomEvent('progress-updated', { detail: { animeId } }));
+
+  // If the anime is not in any user list, clear its grayed-out watched episodes
+  if (!getAnimeListStatus(animeId)) {
+    clearWatchedEpisodes(animeId);
+  }
 };
 
 export const getProgressForAnime = (animeId: number): WatchProgress | undefined => {
